@@ -1,0 +1,178 @@
+@layer user-style, reset;
+
+:root {
+  --wve-zoom: 1;
+}
+
+/* Styles that overrides user-style (scoped to extension UI only) */
+#wve-floating-toolbar,
+#wve-icon-test-panel,
+#wve-selector,
+#wve-floating-toolbar *,
+#wve-icon-test-panel *,
+#wve-selector * {
+  user-select: none;
+  outline: none;
+  cursor: default;
+  pointer-events: auto;
+}
+
+html,
+body {
+  overflow: auto;
+  inset: auto;
+  opacity: initial;
+  visibility: visible;
+  transform: none;
+  transform-style: flat;
+  transition: none;
+  animation: none;
+}
+
+html {
+  margin: 0;
+}
+
+body {
+  position: relative;
+}
+
+/* 缩放只影响用户内容，不影响插件UI */
+body > *:not(#wve-host):not(#wve-selector) {
+  zoom: var(--wve-zoom);
+}
+
+/* 确保插件UI元素不受缩放影响 */
+#wve-host,
+#wve-selector,
+#wve-floating-toolbar,
+#wve-icon-test-panel {
+  zoom: 1 !important;
+}
+
+/* 排除扩展自身 UI，避免悬浮遮罩影响工具栏可见性 */
+/* 扩展 UI 在悬浮遮罩中排除，避免遮住测试面板/工具栏内容 */
+body.wve-edit-mode :hover:not(:has(:hover), [wve-selected], #wve-floating-toolbar, #wve-floating-toolbar *, #wve-icon-test-panel, #wve-icon-test-panel *) {
+  box-shadow: inset 0 0 0 max(100vh, 100vw) color-mix(in srgb, currentColor, transparent 90%);
+}
+
+[wve-selected] {
+  box-shadow: 0 0 0 2px color-mix(in srgb, currentColor, transparent 30%);
+}
+
+[wve-selected][wve-movable] {
+  cursor: grab;
+  box-shadow: 0 0 0 2px var(--vscode-editorWarning-foreground);
+}
+
+[wve-selected][wve-movable]:active {
+  cursor: grabbing;
+}
+
+[wve-selected] * {
+  pointer-events: none;
+}
+
+.wve-adding-selection,
+.wve-adding-selection :not([id^=wve-], [id^=wve-] *) {
+  cursor: copy !important;
+}
+
+/* 工具栏样式现在由 Shadow DOM 内部样式控制，此处仅保留兜底样式 */
+
+#wve-floating-toolbar.dragging {
+  cursor: grabbing !important;
+  transform: none !important;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04) !important;
+  scale: 1.05;
+}
+
+/* 按钮活跃状态 */
+.wve-button.active {
+  background-color: rgb(59 130 246) !important;
+  color: white !important;
+}
+
+/* Lucide 图标 fallback 样式 */
+[data-lucide] {
+  display: inline-block;
+  width: 1rem;
+  height: 1rem;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+}
+/* 确保已替换后的 SVG 也有相同样式（lucide 会把 <i> 替换为 <svg class="lucide ...">） */
+svg.lucide {
+  width: 1rem;
+  height: 1rem;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+}
+/* 在工具栏内强制一个可见的前景色，避免 currentColor 为空或与背景同色导致不可见 */
+#wve-floating-toolbar [data-lucide],
+#wve-floating-toolbar svg.lucide {
+  color: var(--vscode-foreground, #111);
+}
+
+/* 图标测试面板内，强制可见的图标描边与尺寸，绕过 currentColor 继承问题 */
+#wve-icon-test-panel [data-lucide],
+#wve-icon-test-panel svg.lucide {
+  color: #111 !important;
+  stroke: #111 !important;
+  width: 20px;
+  height: 20px;
+}
+
+/* 预览模式样式 */
+body.wve-preview-mode [wve-selected] {
+  box-shadow: none !important;
+}
+
+body.wve-preview-mode :hover {
+  box-shadow: none !important;
+}
+
+/* 编辑模式样式 */
+body.wve-edit-mode {
+  cursor: default;
+}
+
+/* Styles for this extension's elements */
+@font-face {
+  font-family: 'WVE Icons';
+  font-style: normal;
+  font-weight: 400;
+  src: url(./MaterialSymbolsRounded.woff2) format('woff2');
+}
+
+@layer reset {
+  body>[id^=wve-] {
+    &,
+    *,
+    *::before,
+    *::after {
+      all: unset;
+      box-sizing: border-box;
+      font-family: var(--vscode-font-family);
+      font-size: 10px;
+      z-index: calc(infinity);
+    }
+  }
+}
+
+#wve-selector {
+  all: unset;
+  box-sizing: border-box;
+  position: absolute;
+  width: 0;
+  height: 0;
+  background-color: oklch(50% 0 0 / 0.15);
+  /* NOTE Do not use border so that JavaScript can recognize mouse drag area. */
+  box-shadow: 0 0 0 1px var(--vscode-editorWarning-foreground);
+}

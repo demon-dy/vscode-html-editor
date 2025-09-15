@@ -335,12 +335,24 @@ export class VisualEditorProvider implements vscode.CustomTextEditorProvider {
     });
     style.id = 'wve-user-css-imports';
     document.head.appendChild(style);
+
+    // Tailwind CSS 只在扩展 UI 的 Shadow DOM 中使用，不加载到用户页面中避免样式污染
+
+    // Add Lucide Icons
+    const lucideScript = document.createElement('script');
+    lucideScript.setAttribute('src',
+      webview.asWebviewUri(
+        vscode.Uri.file(path.join(this.context.extensionPath, 'webview', 'lib', 'lucide@0.544.0.min.js'))
+      ).toString()
+    );
+    document.head.appendChild(lucideScript);
+
     // Incorporate resources on WebView side
     const link = document.createElement('link');
     link.setAttribute('rel', 'stylesheet');
     link.setAttribute('href',
       webview.asWebviewUri(
-        vscode.Uri.file(path.join(this.context.extensionPath, 'webview', 'style.css'))
+        vscode.Uri.file(path.join(this.context.extensionPath, 'webview', 'style-tailwind.css'))
       ).toString()
     );
     document.head.appendChild(link);

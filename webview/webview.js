@@ -36,14 +36,24 @@ class WebVisualEditor {
   movers = new Set();
   moversBeforeEdit = null;
   htmlParser = null;
+  // Shadow DOM 宿主与根，用于样式隔离扩展 UI
+  uiHost = null;
+  uiRoot = null;
 
   constructor() {
     const state = JSON.parse(sessionStorage.getItem(wve.codeId) ?? '{}');
     this.zoom = state.zoom ?? '1';
     this.linkCode = state.linkCode ?? true;
+    this.editMode = state.editMode ?? true;
+    this.previewMode = state.previewMode ?? false;
   }
 
   initMovables() {
+    // 某些 VS Code 内置 Chromium 版本不支持 CSS Typed OM（computedStyleMap）
+    if (typeof Element !== 'undefined' && !('computedStyleMap' in Element.prototype)) {
+      // 跳过可移动元素能力，避免初始化报错导致后续 UI（含工具栏、图标）不渲染
+      return;
+    }
     this.userElements.forEach(el => {
       const styles = el.computedStyleMap();
       const position = styles.get('position').value;
@@ -81,60 +91,338 @@ class WebVisualEditor {
     this.selector.style.display = 'none';
     document.body.appendChild(this.selector);
   }
-  initToolbar() {
+  /**
+   * 初始化 Shadow DOM 宿主，扩展自身 UI 在此渲染，避免污染用户页面样式
+   */
+  initUIRoot() {
+    if (this.uiRoot) return;
+    this.uiHost = document.createElement('div');
+    this.uiHost.id = 'wve-host';
+    // 将宿主作为 body 直接子元素，确保定位与 z-index 正常
+    document.body.appendChild(this.uiHost);
+    this.uiRoot = this.uiHost.attachShadow({ mode: 'open' });
+
+    // 注入 Tailwind CSS 到 Shadow DOM
+    const tailwindStyle = document.createElement('style');
+    tailwindStyle.textContent = `
+      /* Tailwind CSS Reset and Utilities for Shadow DOM */
+      *, ::before, ::after {
+        box-sizing: border-box;
+        border-width: 0;
+        border-style: solid;
+        border-color: #e5e7eb;
+      }
+
+      /* Utility Classes */
+      .fixed { position: fixed; }
+      .bottom-5 { bottom: 1.25rem; }
+      .z-50 { z-index: 50; }
+      .flex { display: flex; }
+      .items-center { align-items: center; }
+      .justify-center { justify-content: center; }
+      .gap-1 { gap: 0.25rem; }
+      .gap-2 { gap: 0.5rem; }
+      .gap-8 { gap: 2rem; }
+      .rounded { border-radius: 0.25rem; }
+      .rounded-md { border-radius: 0.375rem; }
+      .rounded-full { border-radius: 9999px; }
+      .rounded-12 { border-radius: 0.75rem; }
+      .bg-white { background-color: rgb(255 255 255); }
+      .bg-gray-100 { background-color: rgb(243 244 246); }
+      .bg-gray-200 { background-color: rgb(229 231 235); }
+      .border { border-width: 1px; }
+      .border-0 { border-width: 0px; }
+      .border-gray-200 { border-color: rgb(229 231 235); }
+      .px-2 { padding-left: 0.5rem; padding-right: 0.5rem; }
+      .px-3 { padding-left: 0.75rem; padding-right: 0.75rem; }
+      .py-1 { padding-top: 0.25rem; padding-bottom: 0.25rem; }
+      .py-2 { padding-top: 0.5rem; padding-bottom: 0.5rem; }
+      .p-1 { padding: 0.25rem; }
+      .w-3 { width: 0.75rem; }
+      .w-4 { width: 1rem; }
+      .w-5 { width: 1.25rem; }
+      .w-8 { width: 2rem; }
+      .h-3 { height: 0.75rem; }
+      .h-4 { height: 1rem; }
+      .h-5 { height: 1.25rem; }
+      .h-8 { height: 2rem; }
+      .text-xs { font-size: 0.75rem; line-height: 1rem; }
+      .text-gray-500 { color: rgb(107 114 128); }
+      .text-gray-600 { color: rgb(75 85 99); }
+      .text-gray-800 { color: rgb(31 41 55); }
+      .font-medium { font-weight: 500; }
+      .cursor-pointer { cursor: pointer; }
+      .cursor-grab { cursor: grab; }
+      .cursor-grabbing { cursor: grabbing; }
+      .shadow-lg { box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1); }
+      .backdrop-blur-sm { backdrop-filter: blur(4px); }
+      .transition-colors { transition-property: color, background-color, border-color, text-decoration-color, fill, stroke; transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1); transition-duration: 150ms; }
+      .hover\\:bg-gray-100:hover { background-color: rgb(243 244 246); }
+      .hover\\:bg-gray-200:hover { background-color: rgb(229 231 235); }
+      .hover\\:text-gray-800:hover { color: rgb(31 41 55); }
+      .focus\\:outline-none:focus { outline: 2px solid transparent; outline-offset: 2px; }
+      .focus\\:ring-2:focus { --tw-ring-offset-shadow: var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color); --tw-ring-shadow: var(--tw-ring-inset) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--tw-ring-color); box-shadow: var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow, 0 0 #0000); }
+      .focus\\:ring-blue-500:focus { --tw-ring-color: rgb(59 130 246); }
+
+      /* Component Styles */
+      :host {
+        all: initial;
+        zoom: 1 !important; /* 确保 Shadow DOM 内容不受缩放影响 */
+      }
+      #wve-floating-toolbar {
+        font-family: var(--vscode-font-family, system-ui, -apple-system, Segoe UI, Roboto, Arial);
+        font-size: 12px;
+        color: var(--vscode-foreground, #111);
+        background: var(--vscode-editor-background, #fff);
+        border-color: var(--vscode-widget-border, #e5e7eb);
+        zoom: 1 !important; /* 确保工具栏不受缩放影响 */
+      }
+      #wve-floating-toolbar.dragging {
+        cursor: grabbing !important;
+        transform: none !important;
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04) !important;
+        scale: 1.05;
+      }
+      .active { background-color: rgb(59 130 246) !important; color: #fff !important; }
+      [data-lucide], svg.lucide {
+        display: inline-block;
+        stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; fill: none;
+      }
+      #wve-icon-test-panel {
+        position: fixed; top: 20px; right: 20px; z-index: 2147483647;
+        background: var(--vscode-editor-background,#fff); color: var(--vscode-foreground,#111);
+        border-color: var(--vscode-widget-border,#e5e7eb);
+        font-family: var(--vscode-font-family, system-ui, -apple-system, Segoe UI, Roboto, Arial); font-size: 12px;
+      }
+      #wve-icon-test-panel [data-lucide], #wve-icon-test-panel svg.lucide {
+        width: 20px; height: 20px; color: #111; stroke: #111;
+      }
+
+      /* Button and Input Styles */
+      button {
+        font-family: inherit;
+        font-size: inherit;
+        line-height: inherit;
+        color: inherit;
+        margin: 0;
+        padding: 0;
+        background: none;
+        border: none;
+        outline: none;
+      }
+      select {
+        font-family: inherit;
+        font-size: inherit;
+        line-height: inherit;
+        color: inherit;
+        margin: 0;
+        outline: none;
+      }
+    `;
+    this.uiRoot.appendChild(tailwindStyle);
+  }
+  /**
+   * 初始化底部悬浮工具栏
+   * 根据 PRD 要求，将工具栏移到底部悬浮位置
+   */
+  initFloatingToolbar() {
+    // 确保 UI 容器已初始化
+    this.initUIRoot();
     const fragment = new DocumentFragment();
     this.toolbar = document.createElement('div');
-    this.toolbar.id = 'wve-toolbar';
+    this.toolbar.id = 'wve-floating-toolbar';
+    this.toolbar.className = 'fixed bottom-5 z-50 flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 rounded-full shadow-lg backdrop-blur-sm';
+    // 手动设置居中定位，确保兼容性
+    this.toolbar.style.left = '50%';
+    this.toolbar.style.transform = 'translateX(-50%)';
     fragment.appendChild(this.toolbar);
+
     const controls = {
+      toolbarEditMode: 'wve-edit-mode',
+      toolbarPreviewMode: 'wve-preview-mode',
       toolbarLinkCode: 'wve-link-code',
       toolbarRefresh: 'wve-refresh',
-      toolbarZoomValue: 'wve-zoom-value',
       toolbarZoomIn: 'wve-zoom-in',
       toolbarZoomOut: 'wve-zoom-out',
-      toolbarGroupAlign: 'wve-group-align',
+      toolbarZoomValue: 'wve-zoom-value',
+      toolbarDeviceSelector: 'wve-device-selector',
+      toolbarDragHandle: 'wve-drag-handle'
     };
-    let toolbarHtml = (`
-      <fieldset>
-        <label class="wve-button" title="Link selections with editor">
-          <input id="${controls.toolbarLinkCode}" type="checkbox">
-        </label>
-        <button id="${controls.toolbarRefresh}" type="button" class="wve-button">refresh</button>
-        <button id="${controls.toolbarZoomIn}" type="button" class="wve-button">zoom_in</button>
-        <span id="${controls.toolbarZoomValue}">100%</span>
-        <button id="${controls.toolbarZoomOut}" type="button" class="wve-button">zoom_out</button>
-      </fieldset>
-    `);
-    if (wve.config.enableMovingElements) {
-      toolbarHtml += `
-        <fieldset id="${controls.toolbarGroupAlign}" disabled>
-          <button type="button" class="wve-button" id="align-horizontal-left">align_horizontal_left</button>
-          <button type="button" class="wve-button" id="align-horizontal-center">align_horizontal_center</button>
-          <button type="button" class="wve-button" id="align-horizontal-right">align_horizontal_right</button>
-          <button type="button" class="wve-button" id="align-vertical-top">align_vertical_top</button>
-          <button type="button" class="wve-button" id="align-vertical-center">align_vertical_center</button>
-          <button type="button" class="wve-button" id="align-vertical-bottom">align_vertical_bottom</button>
-          <button type="button" class="wve-button" id="align-horizontal-justify">align_justify_space_even</button>
-          <button type="button" class="wve-button" id="align-vertical-justify">align_space_even</button>
-        </fieldset>`;
-    }
+
+    let toolbarHtml = `
+      <div class="flex items-center cursor-grab hover:bg-gray-100 rounded p-1 transition-colors" id="${controls.toolbarDragHandle}" title="拖拽移动工具栏">
+        <i data-lucide="grip-vertical" class="w-3 h-3 text-gray-500"></i>
+      </div>
+      <div class="flex items-center gap-1">
+        <button id="${controls.toolbarEditMode}" type="button" class="flex items-center justify-center w-8 h-8 rounded-md hover:bg-gray-100 text-gray-600 hover:text-gray-800 transition-colors" title="编辑模式">
+          <i data-lucide="edit-3" class="w-4 h-4"></i>
+        </button>
+        <button id="${controls.toolbarPreviewMode}" type="button" class="flex items-center justify-center w-8 h-8 rounded-md hover:bg-gray-100 text-gray-600 hover:text-gray-800 transition-colors" title="预览模式">
+          <i data-lucide="eye" class="w-4 h-4"></i>
+        </button>
+        <button id="${controls.toolbarLinkCode}" type="button" class="flex items-center justify-center w-8 h-8 rounded-md hover:bg-gray-100 text-gray-600 hover:text-gray-800 transition-colors" title="关联代码">
+          <i data-lucide="link" class="w-4 h-4"></i>
+        </button>
+        <button id="${controls.toolbarRefresh}" type="button" class="flex items-center justify-center w-8 h-8 rounded-md hover:bg-gray-100 text-gray-600 hover:text-gray-800 transition-colors" title="刷新视图">
+          <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+        </button>
+        <button id="${controls.toolbarZoomIn}" type="button" class="flex items-center justify-center w-8 h-8 rounded-md hover:bg-gray-100 text-gray-600 hover:text-gray-800 transition-colors" title="放大视图">
+          <i data-lucide="zoom-in" class="w-4 h-4"></i>
+        </button>
+        <span id="${controls.toolbarZoomValue}" class="px-2 py-1 text-xs font-medium text-gray-600 bg-gray-100 rounded">100%</span>
+        <button id="${controls.toolbarZoomOut}" type="button" class="flex items-center justify-center w-8 h-8 rounded-md hover:bg-gray-100 text-gray-600 hover:text-gray-800 transition-colors" title="缩小视图">
+          <i data-lucide="zoom-out" class="w-4 h-4"></i>
+        </button>
+        <select id="${controls.toolbarDeviceSelector}" class="px-2 py-1 text-xs font-medium bg-gray-100 border-0 rounded cursor-pointer hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500" title="设备预览">
+          <option value="desktop">1440×900 桌面</option>
+          <option value="laptop">1024×768 笔记本</option>
+          <option value="tablet">768×1024 平板</option>
+          <option value="mobile-large">414×896 大屏手机</option>
+          <option value="mobile-medium">375×667 中屏手机</option>
+          <option value="mobile-small">320×568 小屏手机</option>
+        </select>
+      </div>
+    `;
+
     this.toolbar.innerHTML = toolbarHtml;
+
+    // 先把 fragment 挂载到页面上，再查询控件，避免空引用
+    // 渲染到 Shadow DOM 中
+    this.uiRoot.appendChild(fragment);
+
+    // 保存控件引用（基于已挂载的 toolbar 查询）
     Object.entries(controls).forEach(([key, id]) => {
-      this[key] = fragment.getElementById(id);
+      this[key] = this.uiRoot.getElementById ? this.uiRoot.getElementById(id) : this.uiRoot.querySelector('#' + id);
     });
-    this.toolbarLinkCode.addEventListener('change', event => {
-      this.linkCode = event.target.checked;
+
+    // 绑定事件处理器（容错处理，避免未找到元素导致报错）
+    this.setupToolbarEventHandlers();
+
+    // 初始化 Lucide 图标（全局）并替换 Shadow DOM 内的图标
+    this.initializeLucideIcons();
+    this.replaceLucideInRoot(this.uiRoot);
+  }
+
+
+  /**
+   * 初始化 Lucide 图标
+   */
+  initializeLucideIcons() {
+    // 等待 Lucide 库加载完成
+    if (typeof lucide !== 'undefined' && lucide.createIcons) {
+      try {
+        // 显式传入内置图标表，避免某些打包环境下的默认导出解析问题
+        if (lucide.icons) {
+          lucide.createIcons({ icons: lucide.icons });
+        } else {
+          lucide.createIcons();
+        }
+        // 二次运行，确保动态插入的节点也被替换
+        setTimeout(() => {
+          try {
+            if (lucide.icons) {
+              lucide.createIcons({ icons: lucide.icons });
+            } else {
+              lucide.createIcons();
+            }
+          } catch (_) { /* no-op */ }
+        }, 300);
+      } catch (_) {
+        // 轻量容错：稍后再试
+        setTimeout(() => this.initializeLucideIcons(), 150);
+      }
+    } else {
+      // 如果库还没加载，延迟初始化
+      setTimeout(() => this.initializeLucideIcons(), 100);
+    }
+  }
+
+  /**
+   * 在指定根节点内替换 data-lucide 元素为 SVG（适配 Shadow DOM）
+   */
+  replaceLucideInRoot(root) {
+    try {
+      if (!root) return;
+      const nodes = root.querySelectorAll('[data-lucide]');
+      if (!nodes.length) return;
+      const icons = (typeof lucide !== 'undefined' && lucide.icons) ? lucide.icons : null;
+      if (!icons) return;
+      const toPascal = (name) => name
+        .split(/[\s_-]+/)
+        .filter(Boolean)
+        .map(s => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase())
+        .join('');
+      const NS = 'http://www.w3.org/2000/svg';
+      nodes.forEach(el => {
+        const rawName = el.getAttribute('data-lucide');
+        if (!rawName) return;
+        const iconDef = icons[toPascal(rawName)];
+        if (!iconDef) return;
+        const svg = document.createElementNS(NS, 'svg');
+        // 默认属性，与 lucide 保持一致
+        svg.setAttribute('xmlns', NS);
+        svg.setAttribute('viewBox', '0 0 24 24');
+        svg.setAttribute('fill', 'none');
+        svg.setAttribute('stroke', 'currentColor');
+        svg.setAttribute('stroke-width', '2');
+        svg.setAttribute('stroke-linecap', 'round');
+        svg.setAttribute('stroke-linejoin', 'round');
+        svg.setAttribute('data-lucide', rawName);
+        const cls = ['lucide', `lucide-${rawName}`].concat((el.getAttribute('class') || '').split(/\s+/).filter(Boolean));
+        svg.setAttribute('class', cls.join(' '));
+        // 构建子元素
+        iconDef.forEach(([tag, attrs]) => {
+          const child = document.createElementNS(NS, tag);
+          Object.entries(attrs).forEach(([k, v]) => child.setAttribute(k, String(v)));
+          svg.appendChild(child);
+        });
+        el.parentNode && el.parentNode.replaceChild(svg, el);
+      });
+    } catch (_) { /* no-op */ }
+  }
+
+  /**
+   * 设置工具栏事件处理器
+   */
+  setupToolbarEventHandlers() {
+    // 编辑模式切换
+    this.toolbarEditMode?.addEventListener('click', () => {
+      this.toggleEditMode();
+    });
+
+    // 预览模式切换
+    this.toolbarPreviewMode?.addEventListener('click', () => {
+      this.togglePreviewMode();
+    });
+
+    // 关联代码切换
+    this.toolbarLinkCode?.addEventListener('click', () => {
+      this.linkCode = !this.linkCode;
+      this.updateLinkCodeButton();
       this.saveState();
     });
-    this.toolbarZoomIn.addEventListener('click', event => { this.updateZoom(1); });
-    this.toolbarZoomOut.addEventListener('click', event => { this.updateZoom(-1); });
-    this.toolbarRefresh.addEventListener('click', event => {
+
+    // 刷新视图
+    this.toolbarRefresh?.addEventListener('click', () => {
       vscode.postMessage({ type: 'refresh' });
     });
-    if (wve.config.enableMovingElements) {
-      this.toolbarGroupAlign.addEventListener('click', this.onClickGroupAlign);
-    }
-    document.body.appendChild(fragment);
+
+    // 缩放控制
+    this.toolbarZoomIn?.addEventListener('click', () => {
+      this.updateZoom(1);
+    });
+
+    this.toolbarZoomOut?.addEventListener('click', () => {
+      this.updateZoom(-1);
+    });
+
+    // 设备选择器
+    this.toolbarDeviceSelector?.addEventListener('change', (event) => {
+      this.switchDevice(event.target.value);
+    });
+
+    // 拖拽手柄
+    this.setupToolbarDragging();
   }
 
   shortNameOf(el) {
@@ -144,6 +432,25 @@ class WebVisualEditor {
     );
   }
   realPositionOf(event) {
+    // 插件UI不受缩放影响，直接返回原始坐标
+    const path = event.composedPath ? event.composedPath() : [];
+    const isPluginUI = path.some(el =>
+      el.id === 'wve-host' ||
+      el.id === 'wve-selector' ||
+      el.id === 'wve-floating-toolbar' ||
+      el.id === 'wve-icon-test-panel'
+    );
+
+    if (isPluginUI) {
+      return {
+        clientX: event.clientX,
+        clientY: event.clientY,
+        pageX: event.pageX,
+        pageY: event.pageY
+      };
+    }
+
+    // 用户内容区域考虑缩放
     return Object.fromEntries(
       ['clientX', 'clientY', 'pageX', 'pageY'].map(
         key => [key, Math.round(event[key] / +this.zoom)]
@@ -171,7 +478,7 @@ class WebVisualEditor {
 
   saveState() {
     const state = Object.fromEntries(
-      ['zoom', 'linkCode'].map(key => [key, this[key]])
+      ['zoom', 'linkCode', 'editMode', 'previewMode'].map(key => [key, this[key]])
     );
     sessionStorage.setItem(wve.codeId, JSON.stringify(state));
     vscode.postMessage({ type: 'state', data: state });
@@ -183,24 +490,221 @@ class WebVisualEditor {
       this.zoom = steps[steps.indexOf(this.zoom) + sign];
       this.saveState();
     }
+
+    // 设置CSS变量，只影响用户内容
     document.documentElement.style.setProperty('--wve-zoom', this.zoom);
-    this.toolbarZoomValue.textContent = (
-      this.zoom.replace(/^0/, ' ').replace('.', '').padEnd(3, '0') + '%'
-    );
+
+    // 更新工具栏显示
+    if (this.toolbarZoomValue) {
+      this.toolbarZoomValue.textContent = (
+        this.zoom.replace(/^0/, ' ').replace('.', '').padEnd(3, '0') + '%'
+      );
+    }
+
+    // 更新按钮状态
     const stepIndex = steps.indexOf(this.zoom);
     if (stepIndex < 0) { return; }
-    if (stepIndex === 0) {
-      this.toolbarZoomOut.setAttribute('disabled', '');
-    } else if (stepIndex === steps.length - 1) {
-      this.toolbarZoomIn.setAttribute('disabled', '');
-    } else {
-      this.toolbarZoomIn.removeAttribute('disabled');
-      this.toolbarZoomOut.removeAttribute('disabled');
+
+    if (this.toolbarZoomOut && this.toolbarZoomIn) {
+      if (stepIndex === 0) {
+        this.toolbarZoomOut.setAttribute('disabled', '');
+        this.toolbarZoomIn.removeAttribute('disabled');
+      } else if (stepIndex === steps.length - 1) {
+        this.toolbarZoomIn.setAttribute('disabled', '');
+        this.toolbarZoomOut.removeAttribute('disabled');
+      } else {
+        this.toolbarZoomIn.removeAttribute('disabled');
+        this.toolbarZoomOut.removeAttribute('disabled');
+      }
     }
   }
 
   updateLinkCode() {
-    this.toolbarLinkCode.checked = this.linkCode;
+    // 更新关联代码按钮状态 - 底部悬浮工具栏版本
+    if (this.toolbarLinkCode) {
+      this.updateLinkCodeButton();
+    }
+  }
+
+  /**
+   * 更新关联代码按钮的视觉状态
+   */
+  updateLinkCodeButton() {
+    if (this.linkCode) {
+      this.toolbarLinkCode.classList.add('active');
+      this.toolbarLinkCode.title = '关联代码 (已启用)';
+    } else {
+      this.toolbarLinkCode.classList.remove('active');
+      this.toolbarLinkCode.title = '关联代码 (已禁用)';
+    }
+  }
+
+  /**
+   * 切换编辑模式
+   */
+  toggleEditMode() {
+    this.editMode = !this.editMode;
+    if (this.editMode) {
+      document.body.classList.add('wve-edit-mode');
+      this.toolbarEditMode.classList.add('active');
+      this.toolbarPreviewMode.classList.remove('active');
+    } else {
+      document.body.classList.remove('wve-edit-mode');
+      this.toolbarEditMode.classList.remove('active');
+    }
+  }
+
+  /**
+   * 切换预览模式
+   */
+  togglePreviewMode() {
+    this.previewMode = !this.previewMode;
+    if (this.previewMode) {
+      document.body.classList.add('wve-preview-mode');
+      this.toolbarPreviewMode.classList.add('active');
+      this.toolbarEditMode.classList.remove('active');
+      // 预览模式下禁用选择
+      this.deselect();
+    } else {
+      document.body.classList.remove('wve-preview-mode');
+      this.toolbarPreviewMode.classList.remove('active');
+    }
+  }
+
+  /**
+   * 设备预览切换
+   */
+  switchDevice(deviceType) {
+    const devicePresets = {
+      'mobile-small': { width: 320, height: 568 },
+      'mobile-medium': { width: 375, height: 667 },
+      'mobile-large': { width: 414, height: 896 },
+      'tablet': { width: 768, height: 1024 },
+      'laptop': { width: 1024, height: 768 },
+      'desktop': { width: 1440, height: 900 }
+    };
+
+    const preset = devicePresets[deviceType];
+    if (preset) {
+      document.body.style.maxWidth = preset.width + 'px';
+      document.body.style.minHeight = preset.height + 'px';
+      document.body.setAttribute('data-device-type', deviceType);
+    } else {
+      // 重置为自适应
+      document.body.style.maxWidth = '';
+      document.body.style.minHeight = '';
+      document.body.removeAttribute('data-device-type');
+    }
+  }
+
+  /**
+   * 设置工具栏拖拽功能
+   * 修复瞬移问题的新实现
+   */
+  setupToolbarDragging() {
+    let isDragging = false;
+    let startMouseX, startMouseY;
+    let startToolbarLeft, startToolbarBottom;
+    let rafId = null;
+
+    // 拖拽移动处理函数，使用 RAF 优化性能
+    const handleDragMove = (e) => {
+      if (!isDragging) return;
+
+      // 取消之前的动画帧请求
+      if (rafId) {
+        cancelAnimationFrame(rafId);
+      }
+
+      rafId = requestAnimationFrame(() => {
+        // 计算鼠标移动的距离
+        const deltaX = e.clientX - startMouseX;
+        const deltaY = e.clientY - startMouseY;
+
+        // 计算新位置
+        let newLeft = startToolbarLeft + deltaX;
+        let newBottom = startToolbarBottom - deltaY; // Y轴反转，因为bottom是从下往上计算
+
+        // 边界检测
+        const toolbarRect = this.toolbar.getBoundingClientRect();
+        const maxLeft = window.innerWidth - toolbarRect.width - 20;
+        const maxBottom = window.innerHeight - toolbarRect.height - 20;
+
+        newLeft = Math.max(20, Math.min(newLeft, maxLeft));
+        newBottom = Math.max(20, Math.min(newBottom, maxBottom));
+
+        // 应用新位置
+        this.toolbar.style.left = newLeft + 'px';
+        this.toolbar.style.bottom = newBottom + 'px';
+        this.toolbar.style.transform = 'none';
+      });
+    };
+
+    this.toolbarDragHandle.addEventListener('mousedown', (e) => {
+      // 记录拖拽开始时的鼠标位置
+      startMouseX = e.clientX;
+      startMouseY = e.clientY;
+
+      // 获取当前工具栏的实际渲染位置
+      const rect = this.toolbar.getBoundingClientRect();
+
+      // 先设置为绝对定位，但保持当前显示位置不变
+      startToolbarLeft = rect.left;
+      startToolbarBottom = window.innerHeight - rect.bottom;
+
+      // 立即应用位置，确保视觉上没有跳跃
+      this.toolbar.style.left = startToolbarLeft + 'px';
+      this.toolbar.style.bottom = startToolbarBottom + 'px';
+      this.toolbar.style.transform = 'none';
+
+      // 开始拖拽
+      isDragging = true;
+      this.toolbar.classList.add('dragging');
+
+      // 阻止默认事件和冒泡
+      e.preventDefault();
+      e.stopPropagation();
+    });
+
+    document.addEventListener('mousemove', handleDragMove);
+
+    const endDrag = () => {
+      if (isDragging) {
+        isDragging = false;
+        this.toolbar.classList.remove('dragging');
+
+        // 取消动画帧请求
+        if (rafId) {
+          cancelAnimationFrame(rafId);
+          rafId = null;
+        }
+
+        // 保存工具栏位置
+        this.saveToolbarPosition();
+      }
+    };
+    document.addEventListener('mouseup', endDrag);
+    window.addEventListener('blur', endDrag);
+  }
+
+  /**
+   * 保存工具栏位置
+   */
+  saveToolbarPosition() {
+    // 不再持久化工具栏位置，始终使用默认底部居中
+    try { localStorage.removeItem('wve-toolbar-position'); } catch (_) { /* no-op */ }
+  }
+
+  /**
+   * 恢复工具栏位置
+   */
+  restoreToolbarPosition() {
+    // 忽略历史位置，始终恢复为底部水平居中
+    if (this.toolbar) {
+      this.toolbar.style.bottom = '20px';
+      this.toolbar.style.left = '50%';
+      this.toolbar.style.transform = 'translateX(-50%)';
+    }
   }
 
   // Emit code edit event to extension
@@ -412,7 +916,9 @@ class WebVisualEditor {
   };
 
   onMouseDown = event => {
-    if (this.toolbar.contains(event.target)) { return; }
+    // 处理 shadow DOM 下事件重定向，使用 composedPath 判断是否点击在工具栏内
+    const path = event.composedPath ? event.composedPath() : [];
+    if (this.toolbar && (this.toolbar.contains(event.target) || path.includes(this.toolbar))) { return; }
     const pos = this.realPositionOf(event);
     this.mouse.start.viewportX = this.mouse.current.viewportX = pos.clientX;
     this.mouse.start.viewportY = this.mouse.current.viewportY = pos.clientY;
@@ -638,7 +1144,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     app.initMovables();
   }
   app.initSelector();
-  app.initToolbar();
+  app.initFloatingToolbar();
+  app.restoreToolbarPosition();
+
+  // 确保 Lucide 图标正确初始化
+  setTimeout(() => {
+    if (typeof lucide !== 'undefined' && lucide.createIcons) {
+      lucide.createIcons();
+    }
+  }, 500);
   app.updateZoom();
   app.updateLinkCode();
   document.addEventListener('mousedown', app.onMouseDown);
