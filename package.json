@@ -1,0 +1,164 @@
+{
+  "name": "vscode-html-editor",
+  "version": "0.1.0",
+  "displayName": "html Editor",
+  "description": "Edit HTML files visually.",
+  "categories": [
+    "Visualization"
+  ],
+  "extensionKind": [
+    "ui"
+  ],
+  "icon": "images/icon-logo.png",
+  "engines": {
+    "vscode": "^1.99.0"
+  },
+  "publisher": "Urin",
+  "author": "Urin",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/urin/vscode-web-visual-editor.git"
+  },
+  "bugs": {
+    "url": "https://github.com/urin/vscode-web-visual-editor/issues"
+  },
+  "sponsor": {
+    "url": "https://github.com/sponsors/urin"
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run package",
+    "compile": "npm run check-types && npm run lint && node esbuild.js",
+    "watch": "npm-run-all -p watch:*",
+    "watch:esbuild": "node esbuild.js --watch",
+    "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
+    "package": "npm run check-types && npm run lint && node esbuild.js --production",
+    "compile-tests": "tsc -p . --outDir out",
+    "watch-tests": "tsc -p . -w --outDir out",
+    "pretest": "npm run compile-tests && npm run compile && npm run lint",
+    "check-types": "tsc --noEmit",
+    "lint": "eslint src --ext ts"
+  },
+  "dependencies": {
+    "he": "^1.2.0",
+    "jsdom": "^26.1.0"
+  },
+  "devDependencies": {
+    "@types/he": "^1.2.3",
+    "@types/jsdom": "^21.1.7",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "22.x",
+    "@types/vscode": "^1.99.1",
+    "@typescript-eslint/eslint-plugin": "^8.30.1",
+    "@typescript-eslint/parser": "^8.30.1",
+    "@vscode/test-cli": "^0.0.10",
+    "@vscode/test-electron": "^2.5.2",
+    "esbuild": "^0.25.2",
+    "eslint": "^8.57.0",
+    "npm-run-all": "^4.1.5",
+    "typescript": "^5.8.3"
+  },
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onLanguage:html"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "web-visual-editor.open",
+        "title": "Visual Editor",
+        "icon": {
+          "light": "images/icon-light.png",
+          "dark": "images/icon-dark.png"
+        }
+      },
+      {
+        "command": "web-visual-editor.openBeside",
+        "title": "Visual Editor to the Side",
+        "icon": {
+          "light": "images/icon-split-light.png",
+          "dark": "images/icon-split-dark.png"
+        }
+      },
+      {
+        "command": "web-visual-editor.showSource",
+        "title": "Show Source",
+        "icon": "$(go-to-file)"
+      }
+    ],
+    "customEditors": [
+      {
+        "priority": "option",
+        "viewType": "web-visual-editor.customEditor",
+        "displayName": "Visual Editor",
+        "selector": [
+          {
+            "filenamePattern": "*.html"
+          },
+          {
+            "filenamePattern": "*.htm"
+          },
+          {
+            "filenamePattern": "*.xhtml"
+          },
+          {
+            "filenamePattern": "*.shtml"
+          },
+          {
+            "filenamePattern": "*.xht"
+          },
+          {
+            "filenamePattern": "*.mhtml"
+          },
+          {
+            "filenamePattern": "*.mht"
+          },
+          {
+            "filenamePattern": "*.ehtml"
+          }
+        ]
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "web-visual-editor.open",
+          "when": "resourceLangId == html",
+          "group": "navigation@5"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "web-visual-editor.openBeside",
+          "when": "resourceLangId == 'html' && activeCustomEditorId != 'web-visual-editor.customEditor'",
+          "group": "navigation@1"
+        },
+        {
+          "command": "web-visual-editor.open",
+          "when": "resourceLangId == 'html' && activeCustomEditorId != 'web-visual-editor.customEditor'",
+          "group": "navigation@2"
+        },
+        {
+          "command": "web-visual-editor.showSource",
+          "when": "activeCustomEditorId == 'web-visual-editor.customEditor'",
+          "group": "navigation@3"
+        }
+      ]
+    },
+    "configuration": {
+      "type": "object",
+      "title": "Web Visual Editor",
+      "properties": {
+        "webVisualEditor.allowScript": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable JavaScript in preview."
+        },
+        "webVisualEditor.enableMovingElements": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable moving position of elements in preview."
+        }
+      }
+    }
+  }
+}
