@@ -11,6 +11,7 @@ window.WVE.WebVisualEditor = class WebVisualEditor {
     this.stateManager = new window.WVE.StateManager();
     this.eventManager = new window.WVE.EventManager(this.stateManager);
     this.uiManager = new window.WVE.UIManager();
+    this.editorStyleManager = null;
 
     // HTML解析器
     this.htmlParser = null;
@@ -35,6 +36,8 @@ window.WVE.WebVisualEditor = class WebVisualEditor {
 
       // 初始化UI组件
       this.uiManager.initUIRoot();
+      this.editorStyleManager = new window.WVE.EditorStyleManager();
+      this.editorStyleManager.init();
       this.uiManager.initSelector();
 
       // 初始化可移动元素管理器

@@ -16,7 +16,7 @@ window.WVE.ElementPanel = class ElementPanel {
     this.orientation = 'horizontal';
     this.dragging = false;
     this.dragOffset = { x: 0, y: 0 };
-    this.persisted = { orientation: 'horizontal' };
+    this.persisted = { orientation: 'horizontal', collapsed: false };
     this.valueNodes = {};
     this.currentTarget = null;
     this.itemOrder = [];
@@ -24,6 +24,8 @@ window.WVE.ElementPanel = class ElementPanel {
     this.overflowButton = null;
     this.overflowMenu = null;
     this.isOverflowOpen = false;
+    this.collapsed = false;
+    this.collapseButton = null;
 
     this.storageKey = `wve-style-toolbar:${window.wve?.codeId || 'default'}`;
 
@@ -34,6 +36,7 @@ window.WVE.ElementPanel = class ElementPanel {
     this.handleResize = this.handleResize.bind(this);
     this.handleOverflowToggle = this.handleOverflowToggle.bind(this);
     this.handleOutsideClick = this.handleOutsideClick.bind(this);
+    this.handleCollapseToggle = this.handleCollapseToggle.bind(this);
   }
 
   init() {
@@ -50,10 +53,14 @@ window.WVE.ElementPanel = class ElementPanel {
     this.applyStoredPosition();
     this.bindDragHandle();
     this.bindOrientationToggle();
+    this.bindCollapseToggle();
+    this.applyCollapsedState();
     this.updateVisibility();
     this.updateValues(null);
 
     window.WVE.LucideIcons.replaceInRoot(this.root);
+
+    this.fixOrientationToggleIcons();
 
     document.addEventListener('wveSelectionChange', this.handleSelectionChange);
     document.addEventListener('wveModeChange', this.handleModeChange);
@@ -70,6 +77,9 @@ window.WVE.ElementPanel = class ElementPanel {
         this.persisted = JSON.parse(stored) || this.persisted;
         if (this.persisted.orientation) {
           this.orientation = this.persisted.orientation;
+        }
+        if (typeof this.persisted.collapsed === 'boolean') {
+          this.collapsed = this.persisted.collapsed;
         }
       }
     } catch (error) {
@@ -119,6 +129,9 @@ window.WVE.ElementPanel = class ElementPanel {
         cursor: grabbing;
         opacity: 0.98;
       }
+      #wve-style-toolbar.collapsed .wve-toolbar-content > *:not(.wve-toolbar-item[data-type="handle"]):not(.wve-control-group) {
+        display: none;
+      }
       .wve-toolbar-content {
         display: flex;
         align-items: center;
@@ -146,13 +159,16 @@ window.WVE.ElementPanel = class ElementPanel {
         cursor: grab;
         background: transparent;
         padding: 6px;
+        justify-content: center;
       }
       #wve-style-toolbar.dragging .wve-toolbar-item[data-type="handle"] {
         cursor: grabbing;
       }
       .wve-toolbar-item[data-type="field"] {
         justify-content: flex-start;
-        min-width: 82px;
+        width: 100px;
+        min-width: 100px;
+        max-width: 100px;
         font-variant-numeric: tabular-nums;
       }
       #wve-style-toolbar[data-orientation="vertical"] .wve-toolbar-item[data-type="field"] {
@@ -180,6 +196,10 @@ window.WVE.ElementPanel = class ElementPanel {
       }
       .wve-value {
         color: rgba(255, 255, 255, 0.9);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 60px;
       }
       .wve-value.is-muted {
         color: rgba(255, 255, 255, 0.55);
@@ -229,9 +249,6 @@ window.WVE.ElementPanel = class ElementPanel {
       }
       .wve-overflow-menu {
         position: absolute;
-        right: 0;
-        top: calc(100% + 6px);
-        min-width: 200px;
         border-radius: 12px;
         padding: 8px;
         display: none;
@@ -265,6 +282,24 @@ window.WVE.ElementPanel = class ElementPanel {
       #wve-style-toolbar[data-orientation="vertical"] .wve-toggle-icons .wve-icon[data-orientation="vertical"] {
         display: inline-block;
       }
+      .wve-control-group {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        width: 100%;
+      }
+      #wve-style-toolbar[data-orientation="horizontal"] .wve-control-group {
+        flex-direction: row;
+        gap: 6px;
+      }
+      #wve-style-toolbar[data-orientation="vertical"] .wve-control-group {
+        flex-direction: row;
+        justify-content: space-between;
+      }
+      #wve-style-toolbar[data-orientation="vertical"] .wve-control-group .wve-toolbar-item {
+        flex: 1;
+        justify-content: center;
+      }
     `;
 
     const toolbar = document.createElement('div');
@@ -284,6 +319,10 @@ window.WVE.ElementPanel = class ElementPanel {
   buildItems() {
     const schema = [
       { type: 'handle', id: 'dragHandle', icon: 'grip-horizontal', label: '拖拽移动操作栏', fixed: true },
+      { type: 'control-group', id: 'controls', fixed: true, controls: [
+        { type: 'button', id: 'collapseToggle', icon: 'chevron-left', label: '收起操作栏', collapse: true },
+        { type: 'button', id: 'orientationToggle', icon: 'more-horizontal', label: '切换操作栏布局', toggle: true }
+      ]},
       { type: 'divider' },
       { type: 'field', id: 'backgroundColor', icon: 'paintbrush', label: '背景色' },
       { type: 'field', id: 'backgroundImage', icon: 'image', label: '背景图片' },
@@ -303,8 +342,7 @@ window.WVE.ElementPanel = class ElementPanel {
       { type: 'field', id: 'opacity', icon: 'droplet', label: '不透明度' },
       { type: 'divider' },
       { type: 'field', id: 'width', icon: 'move-horizontal', label: '宽度' },
-      { type: 'field', id: 'height', icon: 'move-vertical', label: '高度' },
-      { type: 'button', id: 'orientationToggle', label: '切换操作栏布局', toggle: true, fixed: true }
+      { type: 'field', id: 'height', icon: 'move-vertical', label: '高度' }
     ];
 
     schema.forEach(item => {
@@ -368,29 +406,75 @@ window.WVE.ElementPanel = class ElementPanel {
         return;
       }
 
-      if (item.type === 'button' && item.toggle) {
+      if (item.type === 'button' && item.collapse) {
         const button = document.createElement('button');
         button.type = 'button';
-        button.className = 'wve-toolbar-item wve-toggle-icons';
-        button.dataset.type = 'button';
-        button.id = 'wve-orientation-toggle';
+        button.className = 'wve-toolbar-item';
+        button.dataset.type = 'collapse';
+        button.id = 'wve-collapse-toggle';
         button.title = item.label;
 
-        const iconHorizontal = document.createElement('i');
-        iconHorizontal.className = 'wve-icon';
-        iconHorizontal.setAttribute('data-lucide', 'more-horizontal');
-        iconHorizontal.dataset.orientation = 'horizontal';
+        const icon = document.createElement('i');
+        icon.className = 'wve-icon';
+        icon.setAttribute('data-lucide', item.icon);
 
-        const iconVertical = document.createElement('i');
-        iconVertical.className = 'wve-icon';
-        iconVertical.setAttribute('data-lucide', 'more-vertical');
-        iconVertical.dataset.orientation = 'vertical';
-
-        button.appendChild(iconHorizontal);
-        button.appendChild(iconVertical);
+        button.appendChild(icon);
         this.toolbar.appendChild(button);
-        this.orientationToggle = button;
+        this.collapseButton = button;
         this.itemOrder.push({ node: button, meta: item });
+        return;
+      }
+
+      if (item.type === 'control-group') {
+        const group = document.createElement('div');
+        group.className = 'wve-control-group';
+        group.dataset.type = 'control-group';
+
+        item.controls.forEach(control => {
+          if (control.type === 'button' && control.collapse) {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'wve-toolbar-item';
+            button.dataset.type = 'collapse';
+            button.id = 'wve-collapse-toggle';
+            button.title = control.label;
+
+            const icon = document.createElement('i');
+            icon.className = 'wve-icon';
+            icon.setAttribute('data-lucide', control.icon);
+
+            button.appendChild(icon);
+            group.appendChild(button);
+            this.collapseButton = button;
+          }
+
+          if (control.type === 'button' && control.toggle) {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'wve-toolbar-item wve-toggle-icons';
+            button.dataset.type = 'button';
+            button.id = 'wve-orientation-toggle';
+            button.title = control.label;
+
+            const iconHorizontal = document.createElement('i');
+            iconHorizontal.className = 'wve-icon';
+            iconHorizontal.setAttribute('data-lucide', 'more-horizontal');
+            iconHorizontal.dataset.orientation = 'horizontal';
+
+            const iconVertical = document.createElement('i');
+            iconVertical.className = 'wve-icon';
+            iconVertical.setAttribute('data-lucide', 'more-vertical');
+            iconVertical.dataset.orientation = 'vertical';
+
+            button.appendChild(iconHorizontal);
+            button.appendChild(iconVertical);
+            group.appendChild(button);
+            this.orientationToggle = button;
+          }
+        });
+
+        this.toolbar.appendChild(group);
+        this.itemOrder.push({ node: group, meta: item });
       }
     });
   }
@@ -436,8 +520,50 @@ window.WVE.ElementPanel = class ElementPanel {
     this.applyOrientation(next);
   }
 
+  fixOrientationToggleIcons() {
+    if (this.orientationToggle) {
+      const icons = this.orientationToggle.querySelectorAll('svg[data-lucide]');
+      icons.forEach(icon => {
+        const lucideType = icon.getAttribute('data-lucide');
+        if (lucideType === 'more-horizontal') {
+          icon.dataset.orientation = 'horizontal';
+        } else if (lucideType === 'more-vertical') {
+          icon.dataset.orientation = 'vertical';
+        }
+      });
+    }
+  }
+
   bindOrientationToggle() {
     this.orientationToggle?.addEventListener('click', () => this.toggleOrientation());
+  }
+
+  bindCollapseToggle() {
+    this.collapseButton?.addEventListener('click', this.handleCollapseToggle);
+  }
+
+  handleCollapseToggle() {
+    this.toggleCollapsed();
+  }
+
+  toggleCollapsed() {
+    this.collapsed = !this.collapsed;
+    this.applyCollapsedState();
+    this.saveState({ collapsed: this.collapsed });
+  }
+
+  applyCollapsedState() {
+    if (!this.panel || !this.collapseButton) return;
+
+    this.panel.classList.toggle('collapsed', this.collapsed);
+
+    const icon = this.collapseButton.querySelector('.wve-icon');
+    if (icon) {
+      icon.setAttribute('data-lucide', this.collapsed ? 'chevron-right' : 'chevron-left');
+      window.WVE.LucideIcons?.replaceInRoot?.(this.collapseButton);
+    }
+
+    this.collapseButton.title = this.collapsed ? '展开操作栏' : '收起操作栏';
   }
 
   bindDragHandle() {
@@ -514,6 +640,9 @@ window.WVE.ElementPanel = class ElementPanel {
     if (this.dragging) return;
     this.applyStoredPosition();
     this.updateOverflowLayout();
+    if (this.isOverflowOpen) {
+      this.positionOverflowMenu();
+    }
   }
 
   handleOverflowToggle(event) {
@@ -522,6 +651,72 @@ window.WVE.ElementPanel = class ElementPanel {
     this.isOverflowOpen = !this.isOverflowOpen;
     this.overflowMenu.setAttribute('data-open', String(this.isOverflowOpen));
     this.overflowButton?.setAttribute('aria-expanded', String(this.isOverflowOpen));
+
+    if (this.isOverflowOpen) {
+      this.positionOverflowMenu();
+    }
+  }
+
+  positionOverflowMenu() {
+    if (!this.overflowMenu || !this.overflowWrapper || !this.panel) return;
+
+    // 重置位置以获取正确的尺寸
+    this.overflowMenu.style.left = '';
+    this.overflowMenu.style.right = '';
+    this.overflowMenu.style.top = '';
+    this.overflowMenu.style.bottom = '';
+
+    const buttonRect = this.overflowWrapper.getBoundingClientRect();
+    const menuRect = this.overflowMenu.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+
+    const margin = 8; // 与屏幕边缘的最小距离
+
+    // 计算各个方向的可用空间
+    const spaceBelow = viewportHeight - buttonRect.bottom - margin;
+    const spaceAbove = buttonRect.top - margin;
+    const spaceRight = viewportWidth - buttonRect.right - margin;
+    const spaceLeft = buttonRect.left - margin;
+
+    let position = {};
+
+    if (this.orientation === 'horizontal') {
+      // 横向模式：优先在下方弹出，空间不够则在上方
+      if (spaceBelow >= menuRect.height || spaceBelow >= spaceAbove) {
+        // 在下方弹出
+        position.top = 'calc(100% + 6px)';
+      } else {
+        // 在上方弹出
+        position.bottom = 'calc(100% + 6px)';
+      }
+
+      // 水平对齐：优先右对齐，空间不够则左对齐
+      if (spaceRight >= menuRect.width || spaceRight >= spaceLeft) {
+        position.right = '0';
+      } else {
+        position.left = '0';
+      }
+    } else {
+      // 纵向模式：优先在右侧弹出，空间不够则在左侧
+      if (spaceRight >= menuRect.width || spaceRight >= spaceLeft) {
+        // 在右侧弹出
+        position.left = 'calc(100% + 6px)';
+      } else {
+        // 在左侧弹出
+        position.right = 'calc(100% + 6px)';
+      }
+
+      // 垂直对齐：根据可用空间决定从顶部还是底部对齐
+      if (spaceBelow >= menuRect.height || spaceBelow >= spaceAbove) {
+        position.top = '0';
+      } else {
+        position.bottom = '0';
+      }
+    }
+
+    // 应用计算出的位置
+    Object.assign(this.overflowMenu.style, position);
   }
 
   handleOutsideClick(event) {
@@ -760,6 +955,7 @@ window.WVE.ElementPanel = class ElementPanel {
     this.closeOverflowMenu();
 
     const availableWidth = Math.max(window.innerWidth - 48, 320);
+    const availableHeight = Math.max(window.innerHeight - 48, 200);
     const reference = this.overflowWrapper;
     this.overflowMenu.innerHTML = '';
 
@@ -770,8 +966,9 @@ window.WVE.ElementPanel = class ElementPanel {
       node.classList.remove('wve-overflow-item');
     });
 
-    if (this.orientation !== 'horizontal') {
-      this.overflowWrapper.style.display = 'none';
+    if (this.orientation === 'vertical') {
+      this.overflowWrapper.style.display = 'flex';
+      this.handleVerticalOverflow(availableHeight, reference);
       return;
     }
 
@@ -824,6 +1021,68 @@ window.WVE.ElementPanel = class ElementPanel {
     const maxIterations = this.itemOrder.length * 2;
 
     while (this.panel.getBoundingClientRect().width > availableWidth && safety < maxIterations) {
+      safety += 1;
+      const index = findLastMovableIndex();
+      if (index === -1) break;
+      moveIndexToOverflow(index);
+      cleanupTrailingDivider();
+    }
+
+    cleanupTrailingDivider();
+
+    if (!this.overflowMenu.childElementCount) {
+      this.overflowWrapper.style.display = 'none';
+    }
+  }
+
+  handleVerticalOverflow(availableHeight, reference) {
+    const findLastMovableIndex = () => {
+      for (let index = this.itemOrder.length - 1; index >= 0; index--) {
+        const item = this.itemOrder[index];
+        if (item.meta.fixed) continue;
+        if (item.node.parentNode === this.toolbar) {
+          return index;
+        }
+      }
+      return -1;
+    };
+
+    const moveIndexToOverflow = (index) => {
+      if (index < 0) return;
+      const item = this.itemOrder[index];
+      if (item.node.parentNode === this.overflowMenu) return;
+      if (this.overflowMenu.firstChild) {
+        this.overflowMenu.insertBefore(item.node, this.overflowMenu.firstChild);
+      } else {
+        this.overflowMenu.appendChild(item.node);
+      }
+      item.node.classList.add('wve-overflow-item');
+    };
+
+    const cleanupTrailingDivider = () => {
+      while (true) {
+        let lastVisible = -1;
+        for (let index = this.itemOrder.length - 1; index >= 0; index--) {
+          const item = this.itemOrder[index];
+          if (item.node.parentNode === this.toolbar && item.node !== this.overflowWrapper) {
+            lastVisible = index;
+            break;
+          }
+        }
+        if (lastVisible === -1) break;
+        const item = this.itemOrder[lastVisible];
+        if (item.meta.type === 'divider') {
+          moveIndexToOverflow(lastVisible);
+        } else {
+          break;
+        }
+      }
+    };
+
+    let safety = 0;
+    const maxIterations = this.itemOrder.length * 2;
+
+    while (this.panel.getBoundingClientRect().height > availableHeight && safety < maxIterations) {
       safety += 1;
       const index = findLastMovableIndex();
       if (index === -1) break;

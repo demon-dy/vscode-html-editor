@@ -493,6 +493,7 @@ export class VisualEditorProvider implements vscode.CustomTextEditorProvider {
       { path: 'modules/layout/MovableManager.js', description: '可移动元素管理', required: true },
 
       // UI模块
+      { path: 'modules/ui/EditorStyleManager.js', description: '编辑器样式管理', required: true },
       { path: 'modules/ui/UIManager.js', description: 'UI管理器', required: true },
       { path: 'modules/ui/FloatingToolbar.js', description: '悬浮工具栏', required: true },
       { path: 'modules/ui/ToolbarDragHandler.js', description: '工具栏拖拽', required: true },
