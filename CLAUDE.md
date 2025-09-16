@@ -33,7 +33,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### 核心文件结构
 - `src/extension.ts` - 扩展的主入口文件，注册命令和自定义编辑器
 - `src/visualEditor.ts` - 可视化编辑器的核心实现，处理 WebView 与代码的同步
-- `webview/` - WebView 相关的前端资源（JavaScript、CSS、字体）
+- `webview/` - WebView 相关的前端资源，采用模块化架构
+  - `modules/core/` - 核心模块（WebVisualEditor、StateManager、EventManager）
+  - `modules/ui/` - UI管理模块（UIManager、FloatingToolbar、ToolbarDragHandler）
+  - `modules/interaction/` - 交互处理模块（SelectionManager、KeyboardHandler、MouseHandler）
+  - `modules/layout/` - 布局管理模块（MovableManager）
+  - `modules/utils/` - 工具模块（Logger、DOMUtils、LucideIcons）
+  - `webview.js` - WebView入口文件
 - `package.json` - 扩展配置，定义命令、菜单和设置
 
 ### 关键组件
@@ -75,9 +81,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - 强制使用分号
 - 命名约定：驼峰式和帕斯卡式
 
+### WebView 模块化架构
+项目采用严格的模块化架构，脚本按依赖顺序加载：
+1. **第三方库**: Lucide图标库
+2. **工具模块**: Logger、DOMUtils、LucideIcons
+3. **核心模块**: StateManager、EventManager
+4. **功能模块**: UI管理、交互处理、布局管理
+5. **主模块**: WebVisualEditor主类、入口文件
+
+### 脚本加载机制
+- `visualEditor.ts:loadModularScripts()` 方法统一管理所有脚本加载
+- 支持可选功能的动态加载（通过配置启用）
+- 严格的依赖顺序确保模块间正确初始化
+
 ## 开发注意事项
 
 1. **WebView 通信**: 扩展使用 WebView 与前端进行双向通信，需要注意消息传递的格式和时序
 2. **HTML 解析**: 使用 JSDOM 进行服务端 HTML 解析，避免在 WebView 中进行复杂的 DOM 操作
 3. **同步机制**: 代码编辑器和可视化编辑器之间的同步是核心功能，需要仔细处理选择状态和内容变更
 4. **性能优化**: 大型 HTML 文件的处理需要考虑性能，避免频繁的 DOM 操作
+5. **模块依赖**: WebView 中的脚本具有严格的加载顺序，修改时需确保依赖关系正确

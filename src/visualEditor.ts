@@ -338,16 +338,7 @@ export class VisualEditorProvider implements vscode.CustomTextEditorProvider {
 
     // Tailwind CSS 只在扩展 UI 的 Shadow DOM 中使用，不加载到用户页面中避免样式污染
 
-    // Add Lucide Icons
-    const lucideScript = document.createElement('script');
-    lucideScript.setAttribute('src',
-      webview.asWebviewUri(
-        vscode.Uri.file(path.join(this.context.extensionPath, 'webview', 'lib', 'lucide@0.544.0.min.js'))
-      ).toString()
-    );
-    document.head.appendChild(lucideScript);
-
-    // Incorporate resources on WebView side
+    // Incorporate CSS resources
     const link = document.createElement('link');
     link.setAttribute('rel', 'stylesheet');
     link.setAttribute('href',
@@ -356,13 +347,9 @@ export class VisualEditorProvider implements vscode.CustomTextEditorProvider {
       ).toString()
     );
     document.head.appendChild(link);
-    const script = document.createElement('script');
-    script.setAttribute('src',
-      webview.asWebviewUri(
-        vscode.Uri.file(path.join(this.context.extensionPath, 'webview', 'webview.js'))
-      ).toString()
-    );
-    document.head.appendChild(script);
+
+    // Load all scripts in dependency order
+    this.loadModularScripts(webview, document);
     // Add timestamp to ensure update WebView
     // NOTE WebView has HTML cache, and if the same string is set consecutively,
     // it will not reflect it even if actual HTML on the WebView has been updated.
@@ -371,6 +358,122 @@ export class VisualEditorProvider implements vscode.CustomTextEditorProvider {
     timestamp.setAttribute('value', (new Date()).toISOString());
     document.head.appendChild(timestamp);
     webview.html = dom.serialize();
+  }
+
+  /**
+   * 统一加载所有脚本资源
+   */
+  private loadModularScripts(webview: vscode.Webview, document: any) {
+    // 脚本配置 - 按严格的依赖顺序
+    interface ScriptConfig {
+      path: string;
+      description: string;
+      required: boolean;
+    }
+
+    const scriptConfigs: ScriptConfig[] = [
+      // 第三方库 - 必须最先加载
+      { path: 'lib/lucide@0.544.0.min.js', description: 'Lucide 图标库', required: true },
+
+      // 工具模块 - 基础工具，被其他模块依赖
+      { path: 'modules/utils/Logger.js', description: '统一日志系统', required: true },
+      { path: 'modules/utils/DOMUtils.js', description: 'DOM操作工具', required: true },
+      { path: 'modules/utils/LucideIcons.js', description: '图标管理', required: true },
+
+      // 核心模块 - 基础功能
+      { path: 'modules/core/StateManager.js', description: '状态管理', required: true },
+      { path: 'modules/core/EventManager.js', description: '事件管理', required: true },
+
+      // 布局模块
+      { path: 'modules/layout/MovableManager.js', description: '可移动元素管理', required: true },
+
+      // UI模块
+      { path: 'modules/ui/UIManager.js', description: 'UI管理器', required: true },
+      { path: 'modules/ui/FloatingToolbar.js', description: '悬浮工具栏', required: true },
+      { path: 'modules/ui/ToolbarDragHandler.js', description: '工具栏拖拽', required: true },
+
+      // 交互模块
+      { path: 'modules/interaction/SelectionManager.js', description: '选择管理', required: true },
+      { path: 'modules/interaction/KeyboardHandler.js', description: '键盘交互', required: true },
+      { path: 'modules/interaction/MouseHandler.js', description: '鼠标交互', required: true },
+
+      // 主模块 - 最后加载
+      { path: 'modules/core/WebVisualEditor.js', description: '主编辑器类', required: true },
+      { path: 'webview.js', description: '入口文件', required: true }
+    ];
+
+    // 加载所有必需的脚本
+    scriptConfigs
+      .filter(config => config.required)
+      .forEach((config, index) => {
+        this.createScriptElement(webview, document, config, index + 1);
+      });
+
+    // 加载可选功能脚本（为将来扩展预留）
+    this.loadOptionalFeatures(webview, document, scriptConfigs.length);
+  }
+
+  /**
+   * 创建脚本元素
+   */
+  private createScriptElement(webview: vscode.Webview, document: any, config: any, order: number) {
+    const script = document.createElement('script');
+    script.setAttribute('src',
+      webview.asWebviewUri(
+        vscode.Uri.file(path.join(this.context.extensionPath, 'webview', config.path))
+      ).toString()
+    );
+
+    // 为调试添加标识
+    script.setAttribute('data-wve-script', `${order}-${config.path.split('/').pop()}`);
+    script.setAttribute('data-wve-description', config.description);
+
+    document.head.appendChild(script);
+  }
+
+  /**
+   * 加载可选功能脚本（为将来的功能扩展预留）
+   */
+  private loadOptionalFeatures(webview: vscode.Webview, document: any, baseOrder: number) {
+    // 获取扩展配置
+    const config = vscode.workspace.getConfiguration('webVisualEditor');
+
+    // 可选功能配置
+    const optionalFeatures = {
+      elementPanel: {
+        enabled: config.get<boolean>('features.elementPanel', false),
+        scripts: [
+          { path: 'modules/ui/ElementPanel.js', description: 'Figma风格元素面板' },
+          { path: 'modules/ui/PanelManager.js', description: '面板管理器' }
+        ]
+      },
+      dragDrop: {
+        enabled: config.get<boolean>('features.dragDrop', false),
+        scripts: [
+          { path: 'modules/interaction/DragDropManager.js', description: '拖拽重排功能' },
+          { path: 'modules/ui/DragPreview.js', description: '拖拽预览效果' }
+        ]
+      },
+      layoutModes: {
+        enabled: config.get<boolean>('features.layoutModes', false),
+        scripts: [
+          { path: 'modules/layout/FlexLayoutMode.js', description: 'Flex布局模式' },
+          { path: 'modules/layout/AbsoluteLayoutMode.js', description: '绝对定位模式' },
+          { path: 'modules/layout/FlowLayoutMode.js', description: '流布局模式' }
+        ]
+      }
+    };
+
+    let scriptOrder = baseOrder + 1;
+
+    // 加载启用的可选功能
+    Object.entries(optionalFeatures).forEach(([, feature]) => {
+      if (feature.enabled) {
+        feature.scripts.forEach(scriptConfig => {
+          this.createScriptElement(webview, document, scriptConfig, scriptOrder++);
+        });
+      }
+    });
   }
 
   private getNiceRanges(code: vscode.TextDocument, ranges: any): vscode.Range[] {
