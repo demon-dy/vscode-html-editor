@@ -13,6 +13,7 @@ export class VisualEditorProvider implements vscode.CustomTextEditorProvider {
   private readonly codes = new Map<vscode.TextDocument, Set<vscode.WebviewPanel>>();
   private readonly editedBy = new Set<vscode.WebviewPanel>();
   private readonly resources = new Map<string, Set<vscode.TextDocument>>();
+  private readonly editQueues = new Map<string, Promise<void>>();
 
   constructor(private readonly ec: vscode.ExtensionContext) {
     this.context = ec;
@@ -83,16 +84,16 @@ export class VisualEditorProvider implements vscode.CustomTextEditorProvider {
 
   private postCodeRanges(code: vscode.TextDocument, panel: vscode.WebviewPanel) {
     const dom = new JSDOM(code.getText(), { includeNodeLocations: true });
-    panel.webview.postMessage({
-      type: 'codeRanges',
-      data: Array.from(dom.window.document.querySelectorAll('body *, body')).map(element => {
-        const range = dom.nodeLocation(element)!;
-        return {
-          element: this.shortName(element),
-          start: range.startOffset, end: range.endOffset
-        };
-      })
-    });
+    const elements = Array.from(dom.window.document.querySelectorAll('body *, body'));
+    const data = elements
+      .map(element => ({ element, range: dom.nodeLocation(element) }))
+      .filter(item => item.range)
+      .map(({ element, range }) => ({
+        element: this.shortName(element as Element),
+        start: (range as any).startOffset,
+        end: (range as any).endOffset
+      }));
+    panel.webview.postMessage({ type: 'codeRanges', data });
   }
 
   public async resolveCustomTextEditor(
@@ -121,7 +122,7 @@ export class VisualEditorProvider implements vscode.CustomTextEditorProvider {
       }
     });
     // Message from WebView
-    panel.webview.onDidReceiveMessage(event => {
+    panel.webview.onDidReceiveMessage(async event => {
       switch (event.type) {
         case 'state':
           this.codes.get(code)?.forEach(p => {
@@ -136,29 +137,60 @@ export class VisualEditorProvider implements vscode.CustomTextEditorProvider {
           this.selectElements(code, event);
           break;
         case 'edit':
-          if (this.editElements(code, event)) {
-            this.editedBy.add(panel);
-          }
+          this.enqueueEditOperation(code, panel, event.data);
           break;
         case 'delete':
-          this.deleteElements(code, this.getNiceRanges(code, event.data));
+          // Mark as source to suppress webview refresh triggered by this edit
+          this.editedBy.add(panel);
+          await this.deleteElements(code, this.getNiceRanges(code, event.data));
           break;
         case 'copy':
           this.copyElements(code, this.getNiceRanges(code, event.data));
           break;
         case 'cut':
-          const niceRanges = this.getNiceRanges(code, event.data);
-          this.copyElements(code, niceRanges);
-          this.deleteElements(code, niceRanges);
+          {
+            const niceRanges = this.getNiceRanges(code, event.data);
+            this.copyElements(code, niceRanges);
+            // Mark as source and await deletion to keep state consistent
+            this.editedBy.add(panel);
+            await this.deleteElements(code, niceRanges);
+          }
           break;
         case 'paste':
-          this.pasteToElement(code, event);
+          // Ensure both insert and format edits are attributed to this panel
+          await this.pasteToElement(code, event, panel);
           break;
       }
     });
     // Update webview
     this.updateWebview(panel.webview, code);
     this.activeCode = code;
+  }
+
+  private enqueueEditOperation(code: vscode.TextDocument, panel: vscode.WebviewPanel, edits: any[]) {
+    const key = code.uri.toString();
+    const previous = this.editQueues.get(key) ?? Promise.resolve();
+    const run = async () => {
+      // Mark this panel as the source right before applying edits
+      this.editedBy.add(panel);
+      try {
+        await this.editElements(code, edits);
+      } catch (error) {
+        // Ensure the flag is cleared if the edit fails so future updates aren't skipped
+        this.editedBy.delete(panel);
+        throw error;
+      }
+    };
+
+    const next = previous.then(run, run);
+    const cleanup = next.finally(() => {
+      if (this.editQueues.get(key) === cleanup) {
+        this.editQueues.delete(key);
+      }
+    });
+
+    this.editQueues.set(key, cleanup);
+    next.catch(error => console.error('Failed to process edit operation queue', error));
   }
 
   // Select code range of selected element
@@ -176,45 +208,125 @@ export class VisualEditorProvider implements vscode.CustomTextEditorProvider {
   }
 
   // Reflect edits on WebView to source code
-  private editElements(code: vscode.TextDocument, event: any) {
-    const edit = new vscode.WorkspaceEdit();
-    let shouldEdit = false;
-    event.data.forEach((codeEdit: any) => {
-      const range = new vscode.Range(
-        code.positionAt(codeEdit.codeRange.start),
-        code.positionAt(codeEdit.codeRange.end)
+  private async editElements(code: vscode.TextDocument, edits: any[]) {
+    // 逐条处理，编辑前尽量在最新文档上解析位置，减少并发与偏移问题
+    for (const codeEdit of edits) {
+      await this.applyElementEditWithRetry(code, codeEdit);
+    }
+  }
+
+  private createFragmentFromRange(
+    code: vscode.TextDocument,
+    range: vscode.Range,
+    originalRange: { start: number, end: number }
+  ): Element {
+    const text = code.getText(range);
+    const fragment = JSDOM.fragment(text).firstElementChild;
+    if (fragment === null) {
+      throw Error(
+        'Failed to create virtual DOM from code fragment of '
+        + `${code.fileName}(${originalRange.start}, ${originalRange.end})\n`
+        + text
       );
-      const text = code.getText(range);
-      const fragment = JSDOM.fragment(text).firstElementChild;
-      if (fragment === null) {
-        throw Error(
-          'Failed to create virtual DOM from code fragment of '
-          + `${code.fileName}(${codeEdit.codeRange.start}, ${codeEdit.codeRange.end})\n`
-          + text
-        );
+    }
+    return fragment;
+  }
+
+  private applyOperationsToFragment(fragment: Element, operations: any[]) {
+    for (const operation of operations) {
+      if (operation.style === null) {
+        fragment.removeAttribute('style');
+      } else {
+        fragment.setAttribute('style', operation.style);
       }
-      codeEdit.operations.forEach((operation: any) => {
-        shouldEdit = true;
-        if (operation.style === null) {
-          fragment.removeAttribute('style');
-        } else {
-          fragment.setAttribute('style', operation.style);
-        }
-      });
+    }
+  }
+
+  private isDocumentChangedError(error: unknown): boolean {
+    return error instanceof Error && error.message.includes('has changed in the meantime');
+  }
+
+  private async applyElementEditWithRetry(code: vscode.TextDocument, codeEdit: any) {
+    const maxAttempts = 3;
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      const versionBefore = code.version;
+      const range = this.resolveCurrentRange(code, codeEdit);
+      if (!range) { return; }
+      const fragment = this.createFragmentFromRange(code, range, codeEdit.codeRange ?? { start: 0, end: 0 });
+      this.applyOperationsToFragment(fragment, codeEdit.operations);
+
+      const edit = new vscode.WorkspaceEdit();
       edit.replace(code.uri, range, fragment.outerHTML, {
         needsConfirmation: false, label: 'Edit on WebView'
       });
-    });
-    if (shouldEdit) {
-      vscode.workspace.applyEdit(edit);
+
+      try {
+        const applied = await vscode.workspace.applyEdit(edit);
+        if (applied) {
+          return;
+        }
+      } catch (error) {
+        if (!this.isDocumentChangedError(error)) {
+          throw error;
+        }
+      }
+
+      if (code.version === versionBefore) {
+        // 文档版本未更新，说明失败不是由于外部修改导致，避免死循环
+        break;
+      }
+      // 等待下一轮循环基于最新文档重新计算位置
+      await new Promise(resolve => setTimeout(resolve, 0));
     }
-    return shouldEdit;
   }
 
-  private deleteElements(code: vscode.TextDocument, ranges: vscode.Range[]) {
+  private resolveCurrentRange(code: vscode.TextDocument, codeEdit: any): vscode.Range | null {
+    try {
+      const html = code.getText();
+      const dom = new JSDOM(html, { includeNodeLocations: true });
+      const document = dom.window.document;
+      let target: Element | null = null;
+      if (codeEdit.domPath) {
+        try {
+          target = document.querySelector(codeEdit.domPath);
+        } catch { /* invalid selector fallback below */ }
+      }
+      if (!target) {
+        // 退化为短名 + 旧范围附近匹配
+        const { start, end } = codeEdit.codeRange ?? { start: 0, end: 0 };
+        const elements = Array.from(document.querySelectorAll('body *, body')) as Element[];
+        // 优先选择覆盖旧范围的元素，且 shortName 相同
+        let best: { el: Element, dist: number } | null = null;
+        for (const el of elements) {
+          const loc = dom.nodeLocation(el);
+          if (!loc) continue;
+          const covers = loc.startOffset <= start && end <= loc.endOffset;
+          const name = this.shortName(el);
+          if (covers && name === codeEdit.element) {
+            const dist = (start - loc.startOffset) + (loc.endOffset - end);
+            if (!best || dist < best.dist) {
+              best = { el: el, dist };
+            }
+          }
+        }
+        target = best?.el ?? null;
+      }
+      if (!target) return null;
+      const location = dom.nodeLocation(target);
+      if (!location) return null;
+      return new vscode.Range(
+        code.positionAt(location.startOffset),
+        code.positionAt(location.endOffset)
+      );
+    } catch {
+      return null;
+    }
+  }
+
+  private async deleteElements(code: vscode.TextDocument, ranges: vscode.Range[]) {
     const edit = new vscode.WorkspaceEdit();
     ranges.forEach((range: vscode.Range) => edit.delete(code.uri, range));
-    vscode.workspace.applyEdit(edit);
+    await vscode.workspace.applyEdit(edit);
   }
 
   // Copy process on WebView
@@ -228,7 +340,7 @@ export class VisualEditorProvider implements vscode.CustomTextEditorProvider {
   }
 
   // Paste process on WebView
-  private async pasteToElement(code: vscode.TextDocument, event: any) {
+  private async pasteToElement(code: vscode.TextDocument, event: any, panel: vscode.WebviewPanel) {
     const clipboard = (await vscode.env.clipboard.readText()).trim() + '\n';
     if (clipboard.length === 0) { return; }
     const { start, end } = event.data.codeRange;
@@ -241,6 +353,8 @@ export class VisualEditorProvider implements vscode.CustomTextEditorProvider {
     {
       const edit = new vscode.WorkspaceEdit();
       edit.insert(code.uri, destPos, text, { needsConfirmation: false, label: 'Paste on WebView' });
+      // Attribute this edit to the panel to avoid unnecessary refresh
+      this.editedBy.add(panel);
       await vscode.workspace.applyEdit(edit);
     }
     {
@@ -257,6 +371,8 @@ export class VisualEditorProvider implements vscode.CustomTextEditorProvider {
       for (const f of formatEdits) {
         edit.replace(code.uri, f.range, f.newText, { needsConfirmation: false, label: 'Paste on WebView' });
       }
+      // Re-mark as source for the second batch of edits (formatting)
+      this.editedBy.add(panel);
       await vscode.workspace.applyEdit(edit);
     }
     vscode.window.visibleTextEditors.forEach(editor => {
@@ -336,18 +452,6 @@ export class VisualEditorProvider implements vscode.CustomTextEditorProvider {
     style.id = 'wve-user-css-imports';
     document.head.appendChild(style);
 
-    // Tailwind CSS 只在扩展 UI 的 Shadow DOM 中使用，不加载到用户页面中避免样式污染
-
-    // Incorporate CSS resources
-    const link = document.createElement('link');
-    link.setAttribute('rel', 'stylesheet');
-    link.setAttribute('href',
-      webview.asWebviewUri(
-        vscode.Uri.file(path.join(this.context.extensionPath, 'webview', 'style-tailwind.css'))
-      ).toString()
-    );
-    document.head.appendChild(link);
-
     // Load all scripts in dependency order
     this.loadModularScripts(webview, document);
     // Add timestamp to ensure update WebView
@@ -372,7 +476,8 @@ export class VisualEditorProvider implements vscode.CustomTextEditorProvider {
     }
 
     const scriptConfigs: ScriptConfig[] = [
-      // 第三方库 - 必须最先加载
+      // 第三方库 - 必须最先加载（Tailwind 放在最前，便于后续样式采集）
+      { path: 'lib/tailwind@3.4.17.min.js', description: 'Tailwind CDN Runtime', required: true },
       { path: 'lib/lucide@0.544.0.min.js', description: 'Lucide 图标库', required: true },
 
       // 工具模块 - 基础工具，被其他模块依赖
@@ -402,6 +507,89 @@ export class VisualEditorProvider implements vscode.CustomTextEditorProvider {
       { path: 'webview.js', description: '入口文件', required: true }
     ];
 
+    // 配置 Tailwind CDN - 必须在 Tailwind 脚本加载前设置
+    try {
+      const configScript = document.createElement('script');
+      configScript.textContent = `
+        // 确保 tailwind 对象存在
+        window.tailwind = window.tailwind || {};
+
+        // 配置 Tailwind - 包含更完整的 safelist 和配置
+        window.tailwind.config = {
+          // 确保常用类总是可用
+          safelist: [
+            // 布局
+            'flex','flex-col','grid','items-center','justify-center','justify-between',
+            'gap-1','gap-2','gap-4','gap-8','space-x-1','space-x-2','space-y-1','space-y-2',
+
+            // 定位和尺寸
+            'fixed','absolute','relative','top-0','right-0','bottom-0','left-0',
+            'z-10','z-20','z-50','z-auto',
+            'w-3','w-4','w-5','w-8','w-12','w-14','w-16','w-full','w-auto',
+            'h-3','h-4','h-5','h-8','h-12','h-14','h-16','h-full','h-auto',
+            'min-w-0','max-w-none',
+
+            // 边距和内距
+            'p-0','p-1','p-2','p-3','p-4','px-1','px-2','px-3','px-4','py-1','py-2','py-3','py-4',
+            'm-0','m-1','m-2','m-3','m-4','mx-1','mx-2','mx-3','mx-4','my-1','my-2','my-3','my-4',
+
+            // 圆角和边框
+            'rounded','rounded-md','rounded-lg','rounded-full','rounded-none',
+            'border','border-0','border-2','border-gray-200','border-gray-300','border-blue-500',
+
+            // 背景和颜色
+            'bg-white','bg-gray-50','bg-gray-100','bg-gray-200','bg-gray-800','bg-gray-900',
+            'bg-blue-500','bg-blue-600','bg-red-500','bg-green-500',
+            'text-gray-400','text-gray-500','text-gray-600','text-gray-700','text-gray-800','text-gray-900',
+            'text-white','text-blue-500','text-red-500','text-green-500',
+
+            // 字体
+            'text-xs','text-sm','text-base','text-lg','font-normal','font-medium','font-semibold','font-bold',
+
+            // 交互
+            'cursor-pointer','cursor-grab','cursor-grabbing','cursor-move','cursor-default',
+            'select-none','pointer-events-none','pointer-events-auto',
+
+            // 阴影和效果
+            'shadow','shadow-sm','shadow-md','shadow-lg','shadow-xl',
+            'backdrop-blur-sm','backdrop-blur',
+
+            // 过渡和动画
+            'transition','transition-all','transition-colors','transition-transform',
+            'duration-150','duration-200','duration-300',
+            'ease-in-out','ease-out',
+
+            // 悬停和焦点状态
+            'hover:bg-gray-50','hover:bg-gray-100','hover:bg-gray-200',
+            'hover:text-gray-600','hover:text-gray-700','hover:text-gray-800',
+            'hover:shadow-md','hover:scale-105',
+            'focus:outline-none','focus:ring-1','focus:ring-2','focus:ring-blue-500',
+            'focus:border-blue-500'
+          ],
+
+          // 启用所有变体
+          variants: {
+            extend: {
+              backgroundColor: ['active'],
+              textColor: ['active'],
+              borderColor: ['active']
+            }
+          },
+
+          // 扫描所有可能的位置
+          content: [
+            { raw: '', extension: 'html' }
+          ]
+        };
+
+        // 设置 Tailwind 在 Shadow DOM 中工作的配置
+        if (window.tailwind) {
+          window.tailwind.scanShadowRoots = true;
+        }
+      `;
+      document.head.appendChild(configScript);
+    } catch { /* ignore */ }
+
     // 加载所有必需的脚本
     scriptConfigs
       .filter(config => config.required)
@@ -418,6 +606,8 @@ export class VisualEditorProvider implements vscode.CustomTextEditorProvider {
    */
   private createScriptElement(webview: vscode.Webview, document: any, config: any, order: number) {
     const script = document.createElement('script');
+    // Ensure execution order preserved for dynamically inserted scripts
+    script.async = false;
     script.setAttribute('src',
       webview.asWebviewUri(
         vscode.Uri.file(path.join(this.context.extensionPath, 'webview', config.path))
@@ -441,8 +631,13 @@ export class VisualEditorProvider implements vscode.CustomTextEditorProvider {
     // 可选功能配置
     const optionalFeatures = {
       elementPanel: {
-        enabled: config.get<boolean>('features.elementPanel', false),
+        enabled: config.get<boolean>('features.elementPanel', true),
         scripts: [
+          { path: 'modules/ui/PositioningEngine.js', description: '面板定位引擎' },
+          { path: 'modules/ui/panel/TabManager.js', description: '面板标签管理' },
+          { path: 'modules/ui/panel/StyleTab.js', description: '样式标签页' },
+          { path: 'modules/ui/panel/LayoutTab.js', description: '布局标签页' },
+          { path: 'modules/ui/panel/AttributeTab.js', description: '属性标签页' },
           { path: 'modules/ui/ElementPanel.js', description: 'Figma风格元素面板' },
           { path: 'modules/ui/PanelManager.js', description: '面板管理器' }
         ]

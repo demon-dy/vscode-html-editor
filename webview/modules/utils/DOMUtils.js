@@ -17,6 +17,33 @@ window.WVE.DOMUtils = {
   },
 
   /**
+   * 生成稳定的 CSS 路径（使用 :nth-child，避免类名变化影响）
+   */
+  pathOf(el) {
+    try {
+      const segments = [];
+      let node = el;
+      while (node && node.nodeType === 1 && node !== document.documentElement) {
+        const parent = node.parentElement;
+        const tag = node.tagName.toLowerCase();
+        if (!parent) {
+          segments.unshift(tag);
+          break;
+        }
+        // 计算在父元素中的第几个子元素（仅元素节点）
+        const siblings = Array.from(parent.children);
+        const index = siblings.indexOf(node) + 1; // nth-child 从 1 开始
+        segments.unshift(`${tag}:nth-child(${index})`);
+        node = parent;
+      }
+      return segments.join(' > ');
+    } catch (e) {
+      this.logger.warn('Failed to build path for element', e);
+      return '';
+    }
+  },
+
+  /**
    * 获取真实位置坐标（考虑缩放）
    */
   realPositionOf(event, zoom = '1') {

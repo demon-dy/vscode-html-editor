@@ -1,6 +1,5 @@
-# CLAUDE.md
-
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+**始终使用中文回答**
+**始终使用中文回答**
 
 ## 项目概述
 
@@ -83,7 +82,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### WebView 模块化架构
 项目采用严格的模块化架构，脚本按依赖顺序加载：
-1. **第三方库**: Tailwind CDN、Lucide图标库
+1. **第三方库**: Lucide图标库
 2. **工具模块**: Logger、DOMUtils、LucideIcons
 3. **核心模块**: StateManager、EventManager
 4. **功能模块**: UI管理、交互处理、布局管理
@@ -93,26 +92,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `visualEditor.ts:loadModularScripts()` 方法统一管理所有脚本加载
 - 支持可选功能的动态加载（通过配置启用）
 - 严格的依赖顺序确保模块间正确初始化
-
-### Tailwind CSS 集成
-项目使用 Tailwind CDN 提供样式支持，并通过以下机制确保在 Shadow DOM 中正常工作：
-
-#### 集成策略
-1. **CDN 加载**: 通过 `tailwind@3.4.17.min.js` 提供完整的 Tailwind 功能
-2. **样式同步**: UIManager 自动将 CDN 生成的样式复制到 Shadow DOM
-3. **动态更新**: 监听 DOM 变化，自动同步新生成的样式
-4. **配置预设**: 通过 safelist 确保常用类在初始化时可用
-
-#### 核心方法
-- `UIManager.adoptTailwindStyles()`: 主要的样式采集和同步逻辑
-- `UIManager.injectTailwindStyles()`: 将样式注入 Shadow DOM
-- `UIManager.refreshTailwindStyles()`: 刷新和同步新样式
-- `UIManager.syncTailwindStyles()`: 手动触发样式同步（供其他模块调用）
-
-#### 使用方式
-- **直接使用**: 在 Shadow DOM 内的元素可以直接使用 Tailwind 类名
-- **动态内容**: 添加新内容后自动触发样式同步，无需手动处理
-- **手动同步**: 必要时可调用 `uiManager.syncTailwindStyles()` 强制同步
 
 ## 开发注意事项
 

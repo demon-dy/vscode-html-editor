@@ -79,6 +79,16 @@ window.WVE.WebVisualEditor = class WebVisualEditor {
         this.eventManager
       );
 
+      // 可选：初始化元素操作面板
+      if (window.WVE.PanelManager && window.WVE.ElementPanel) {
+        this.panelManager = new window.WVE.PanelManager(
+          this.uiManager,
+          this.stateManager,
+          this.eventManager
+        );
+        this.panelManager.init();
+      }
+
       // 恢复工具栏位置
       this.toolbarDragHandler.restoreToolbarPosition();
 
@@ -115,15 +125,39 @@ window.WVE.WebVisualEditor = class WebVisualEditor {
           Object.assign(this.stateManager, data);
           this.floatingToolbar.updateZoom();
           this.floatingToolbar.updateLinkCodeButton();
+          this.floatingToolbar.applyModeState();
+          if (typeof this.stateManager.broadcastModeChange === 'function') {
+            this.stateManager.broadcastModeChange();
+          }
+          if (this.stateManager.previewMode) {
+            this.floatingToolbar.clearSelectionForPreview();
+          }
           break;
 
         case 'codeRanges':
           this.selectionManager.updateUserElements();
-          this.selectionManager.userElements.forEach((element, index) => {
-            const { start, end } = data[index];
+          if (!Array.isArray(data)) {
+            this.logger.warn('codeRanges data is not an array');
+            break;
+          }
+          if (data.length !== this.selectionManager.userElements.length) {
+            this.logger.warn('codeRanges length mismatch', {
+              userElements: this.selectionManager.userElements.length,
+              data: data.length
+            });
+          }
+          const count = Math.min(
+            this.selectionManager.userElements.length,
+            data.length
+          );
+          for (let index = 0; index < count; index++) {
+            const element = this.selectionManager.userElements[index];
+            const item = data[index];
+            if (!item) continue;
+            const { start, end } = item;
             element.setAttribute('data-wve-code-start', start);
             element.setAttribute('data-wve-code-end', end);
-          });
+          }
           break;
 
         case 'select':

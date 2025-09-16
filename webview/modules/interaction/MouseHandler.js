@@ -29,10 +29,20 @@ window.WVE.MouseHandler = class MouseHandler {
   onMouseDown = (event) => {
     // 处理 shadow DOM 下事件重定向，使用 composedPath 判断是否点击在工具栏内
     const path = event.composedPath ? event.composedPath() : [];
-    const toolbar = this.uiManager.getUIRoot()?.querySelector('#wve-floating-toolbar');
+    const uiRoot = this.uiManager.getUIRoot?.();
+    const toolbar = uiRoot?.querySelector('#wve-floating-toolbar');
+    const panel = uiRoot?.querySelector('#wve-style-toolbar') || uiRoot?.querySelector('#wve-element-panel');
 
-    if (toolbar && (toolbar.contains(event.target) || path.includes(toolbar))) {
+    if (
+      (toolbar && (toolbar.contains(event.target) || path.includes(toolbar))) ||
+      (panel && (panel.contains(event.target) || path.includes(panel)))
+    ) {
       this.logger.debug('Mouse down on toolbar, ignoring');
+      return;
+    }
+
+    if (!this.stateManager.editMode) {
+      this.logger.debug('Preview mode active - ignoring mouse interactions on document');
       return;
     }
 
@@ -90,6 +100,8 @@ window.WVE.MouseHandler = class MouseHandler {
    * 处理鼠标移动事件
    */
   onMouseMove = (event) => {
+    if (!this.stateManager.editMode) return;
+
     const pos = window.WVE.DOMUtils.realPositionOf(event, this.stateManager.zoom);
 
     // 计算移动距离
@@ -114,6 +126,8 @@ window.WVE.MouseHandler = class MouseHandler {
    * 处理鼠标释放事件
    */
   onMouseUp = (event) => {
+    if (!this.stateManager.editMode) return;
+
     this.logger.debug('Mouse up event');
 
     document.removeEventListener('mousemove', this.onMouseMove);

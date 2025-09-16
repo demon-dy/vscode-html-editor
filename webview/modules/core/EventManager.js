@@ -24,6 +24,7 @@ window.WVE.EventManager = class EventManager {
       const element = edit.element;
       return {
         element: window.WVE.DOMUtils.shortNameOf(element),
+        domPath: window.WVE.DOMUtils.pathOf(element),
         codeRange: {
           start: +element.dataset.wveCodeStart,
           end: +element.dataset.wveCodeEnd
@@ -46,8 +47,19 @@ window.WVE.EventManager = class EventManager {
    * 发送选择变更事件
    */
   emitSelectionChange(selectedElements) {
+    // 内部广播（不受 linkCode 影响）
+    try {
+      const event = new CustomEvent('wveSelectionChange', {
+        detail: { selected: Array.from(selectedElements) }
+      });
+      document.dispatchEvent(event);
+    } catch (e) {
+      this.logger.error('Failed to dispatch internal selection event', e);
+    }
+
+    // 与扩展同步（受 linkCode 控制）
     if (!this.stateManager.linkCode) {
-      this.logger.debug('Link code disabled, skipping selection change');
+      this.logger.debug('Link code disabled, skipping VSCode selection sync');
       return;
     }
 

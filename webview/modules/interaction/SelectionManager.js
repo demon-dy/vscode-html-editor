@@ -9,7 +9,9 @@ window.WVE.SelectionManager = class SelectionManager {
     this.eventManager = eventManager;
 
     this.selected = new Set();
-    this.userElements = Array.from(document.querySelectorAll('body *, body'));
+    // 仅跟踪来自用户源码的元素（带有 data-wve-code-* 标记）
+    this.userElements = Array.from(document.querySelectorAll('body *, body'))
+      .filter(el => el.hasAttribute('data-wve-code-start') && el.hasAttribute('data-wve-code-end'));
 
     this.logger.info('Initializing SelectionManager');
   }
@@ -163,7 +165,9 @@ window.WVE.SelectionManager = class SelectionManager {
    * 更新用户元素列表
    */
   updateUserElements() {
-    this.userElements = Array.from(document.querySelectorAll('body *, body'));
+    // 过滤掉扩展自身注入的节点和隐式插入节点，仅保留有源码位置映射的元素
+    this.userElements = Array.from(document.querySelectorAll('body *, body'))
+      .filter(el => el.hasAttribute('data-wve-code-start') && el.hasAttribute('data-wve-code-end'));
     this.logger.debug('Updated user elements count:', this.userElements.length);
   }
 };

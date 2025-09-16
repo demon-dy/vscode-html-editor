@@ -57,6 +57,8 @@ window.WVE.StateManager = class StateManager {
         editMode: this.editMode,
         previewMode: this.previewMode
       });
+
+      this.broadcastModeChange();
     } catch (error) {
       this.logger.error('Error restoring state:', error);
     }
@@ -152,20 +154,51 @@ window.WVE.StateManager = class StateManager {
   }
 
   /**
+   * 设置模式（edit 或 preview）
+   */
+  setMode(mode) {
+    const normalized = mode === 'preview' ? 'preview' : 'edit';
+    const nextEdit = normalized === 'edit';
+    const nextPreview = normalized === 'preview';
+    const changed = this.editMode !== nextEdit || this.previewMode !== nextPreview;
+
+    this.editMode = nextEdit;
+    this.previewMode = nextPreview;
+
+    if (changed) {
+      this.logger.info('Set mode:', normalized);
+      this.saveState();
+    } else {
+      this.logger.debug('Mode unchanged:', normalized);
+    }
+
+    this.broadcastModeChange();
+  }
+
+  /**
    * 切换编辑模式
    */
   toggleEditMode() {
-    this.editMode = !this.editMode;
-    this.logger.info('Toggled edit mode:', this.editMode);
-    this.saveState();
+    this.setMode(this.editMode ? 'preview' : 'edit');
   }
 
   /**
    * 切换预览模式
    */
   togglePreviewMode() {
-    this.previewMode = !this.previewMode;
-    this.logger.info('Toggled preview mode:', this.previewMode);
-    this.saveState();
+    this.setMode(this.previewMode ? 'edit' : 'preview');
+  }
+
+  broadcastModeChange() {
+    try {
+      const detail = {
+        editMode: this.editMode,
+        previewMode: this.previewMode
+      };
+      const event = new CustomEvent('wveModeChange', { detail });
+      document.dispatchEvent(event);
+    } catch (error) {
+      this.logger.warn('Failed to dispatch mode change event', error);
+    }
   }
 };

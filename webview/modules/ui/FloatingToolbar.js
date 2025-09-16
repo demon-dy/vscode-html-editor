@@ -38,6 +38,10 @@ window.WVE.FloatingToolbar = class FloatingToolbar {
     this.controls = {
       toolbarEditMode: 'wve-edit-mode',
       toolbarPreviewMode: 'wve-preview-mode',
+      toolbarEditModeLabel: 'wve-edit-mode-label',
+      toolbarPreviewModeLabel: 'wve-preview-mode-label',
+      toolbarEditModeButton: 'wve-edit-mode-button',
+      toolbarPreviewModeButton: 'wve-preview-mode-button',
       toolbarLinkCode: 'wve-link-code',
       toolbarRefresh: 'wve-refresh',
       toolbarZoomIn: 'wve-zoom-in',
@@ -76,12 +80,6 @@ window.WVE.FloatingToolbar = class FloatingToolbar {
         <i data-lucide="grip-vertical" class="w-3 h-3 text-gray-500"></i>
       </div>
       <div class="flex items-center gap-1">
-        <button id="${c.toolbarEditMode}" type="button" class="flex items-center justify-center w-8 h-8 rounded-md hover:bg-gray-100 text-gray-600 hover:text-gray-800 transition-colors" title="编辑模式">
-          <i data-lucide="edit-3" class="w-4 h-4"></i>
-        </button>
-        <button id="${c.toolbarPreviewMode}" type="button" class="flex items-center justify-center w-8 h-8 rounded-md hover:bg-gray-100 text-gray-600 hover:text-gray-800 transition-colors" title="预览模式">
-          <i data-lucide="eye" class="w-4 h-4"></i>
-        </button>
         <button id="${c.toolbarLinkCode}" type="button" class="flex items-center justify-center w-8 h-8 rounded-md hover:bg-gray-100 text-gray-600 hover:text-gray-800 transition-colors" title="关联代码">
           <i data-lucide="link" class="w-4 h-4"></i>
         </button>
@@ -103,7 +101,22 @@ window.WVE.FloatingToolbar = class FloatingToolbar {
           <option value="mobile-medium">375×667 中屏手机</option>
           <option value="mobile-small">320×568 小屏手机</option>
         </select>
-      </div>
+        </div>
+        
+        <div class="flex items-center gap-1" role="radiogroup" aria-label="模式切换">
+          <label id="${c.toolbarEditModeLabel}" class="flex" role="radio" aria-checked="true" tabindex="0" title="编辑模式">
+            <input id="${c.toolbarEditMode}" class="wve-mode-radio" type="radio" name="wve-mode" value="edit" checked>
+            <span id="${c.toolbarEditModeButton}" class="flex items-center justify-center w-8 h-8 rounded-md hover:bg-gray-100 text-gray-600 hover:text-gray-800 transition-colors">
+              <i data-lucide="edit-3" class="w-4 h-4"></i>
+            </span>
+          </label>
+          <label id="${c.toolbarPreviewModeLabel}" class="flex" role="radio" aria-checked="false" tabindex="-1" title="预览模式">
+            <input id="${c.toolbarPreviewMode}" class="wve-mode-radio" type="radio" name="wve-mode" value="preview">
+            <span id="${c.toolbarPreviewModeButton}" class="flex items-center justify-center w-8 h-8 rounded-md hover:bg-gray-100 text-gray-600 hover:text-gray-800 transition-colors">
+              <i data-lucide="eye" class="w-4 h-4"></i>
+            </span>
+          </label>
+        </div>
     `;
 
     this.logger.debug('Toolbar HTML created');
@@ -129,15 +142,24 @@ window.WVE.FloatingToolbar = class FloatingToolbar {
     this.logger.debug('Binding toolbar events');
 
     // 编辑模式切换
-    this.toolbarEditMode?.addEventListener('click', () => {
-      this.logger.debug('Edit mode button clicked');
+    this.toolbarEditMode?.addEventListener('change', (event) => {
+      if (!event.target.checked) return;
+      this.logger.debug('Edit mode selected');
       this.toggleEditMode();
     });
 
     // 预览模式切换
-    this.toolbarPreviewMode?.addEventListener('click', () => {
-      this.logger.debug('Preview mode button clicked');
+    this.toolbarPreviewMode?.addEventListener('change', (event) => {
+      if (!event.target.checked) return;
+      this.logger.debug('Preview mode selected');
       this.togglePreviewMode();
+    });
+
+    this.toolbarEditModeLabel?.addEventListener('keydown', (event) => {
+      this.handleModeKeyboard(event, 'edit');
+    });
+    this.toolbarPreviewModeLabel?.addEventListener('keydown', (event) => {
+      this.handleModeKeyboard(event, 'preview');
     });
 
     // 关联代码切换
@@ -170,6 +192,9 @@ window.WVE.FloatingToolbar = class FloatingToolbar {
       this.switchDevice(event.target.value);
     });
 
+    // 初始化模式状态
+    this.applyModeState();
+
     this.logger.debug('Toolbar events bound successfully');
   }
 
@@ -186,36 +211,90 @@ window.WVE.FloatingToolbar = class FloatingToolbar {
    * 切换编辑模式
    */
   toggleEditMode() {
-    this.stateManager.toggleEditMode();
-
-    if (this.stateManager.editMode) {
-      document.body.classList.add('wve-edit-mode');
-      this.toolbarEditMode.classList.add('active');
-      this.toolbarPreviewMode.classList.remove('active');
-    } else {
-      document.body.classList.remove('wve-edit-mode');
-      this.toolbarEditMode.classList.remove('active');
-    }
-
-    this.logger.info('Edit mode toggled:', this.stateManager.editMode);
+    this.stateManager.setMode('edit');
+    this.applyModeState();
+    this.logger.info('Mode set to edit');
   }
 
   /**
    * 切换预览模式
    */
   togglePreviewMode() {
-    this.stateManager.togglePreviewMode();
+    this.stateManager.setMode('preview');
+    this.applyModeState();
+    this.clearSelectionForPreview();
+    this.logger.info('Mode set to preview');
+  }
 
-    if (this.stateManager.previewMode) {
-      document.body.classList.add('wve-preview-mode');
-      this.toolbarPreviewMode.classList.add('active');
-      this.toolbarEditMode.classList.remove('active');
-    } else {
-      document.body.classList.remove('wve-preview-mode');
-      this.toolbarPreviewMode.classList.remove('active');
+  /**
+   * 根据状态更新模式相关的样式与控件
+   */
+  applyModeState() {
+    const isEditMode = !!this.stateManager.editMode;
+    const isPreviewMode = !!this.stateManager.previewMode;
+
+    if (this.toolbarEditMode) {
+      this.toolbarEditMode.checked = isEditMode;
+    }
+    if (this.toolbarPreviewMode) {
+      this.toolbarPreviewMode.checked = isPreviewMode;
     }
 
-    this.logger.info('Preview mode toggled:', this.stateManager.previewMode);
+    this.toolbarEditModeLabel?.setAttribute('aria-checked', String(isEditMode));
+    this.toolbarPreviewModeLabel?.setAttribute('aria-checked', String(isPreviewMode));
+
+    this.toolbarEditModeButton?.classList.toggle('active', isEditMode);
+    this.toolbarPreviewModeButton?.classList.toggle('active', isPreviewMode);
+
+    if (this.toolbarEditModeLabel) {
+      this.toolbarEditModeLabel.setAttribute('tabindex', isEditMode ? '0' : '-1');
+    }
+    if (this.toolbarPreviewModeLabel) {
+      this.toolbarPreviewModeLabel.setAttribute('tabindex', isPreviewMode ? '0' : '-1');
+    }
+
+    document.body.classList.toggle('wve-edit-mode', isEditMode);
+    document.body.classList.toggle('wve-preview-mode', isPreviewMode);
+  }
+
+  /**
+   * 预览模式下清空选择，避免误操作
+   */
+  clearSelectionForPreview() {
+    if (!this.stateManager.previewMode) return;
+
+    try {
+      const app = window.WVE?.app?.();
+      const selectionManager = app?.getSelectionManager?.();
+      selectionManager?.clearSelection?.();
+
+      const selector = this.uiManager.getSelector?.();
+      if (selector) {
+        selector.style.display = 'none';
+      }
+    } catch (error) {
+      this.logger.warn('Failed to clear selection for preview mode', error);
+    }
+  }
+
+  /**
+   * 响应模式标签的键盘交互
+   */
+  handleModeKeyboard(event, mode) {
+    if (event.key === ' ' || event.key === 'Space' || event.key === 'Spacebar' || event.key === 'Enter') {
+      event.preventDefault();
+      if (mode === 'edit') {
+        if (!this.toolbarEditMode?.checked) {
+          this.toolbarEditMode.checked = true;
+        }
+        this.toggleEditMode();
+      } else {
+        if (!this.toolbarPreviewMode?.checked) {
+          this.toolbarPreviewMode.checked = true;
+        }
+        this.togglePreviewMode();
+      }
+    }
   }
 
   /**

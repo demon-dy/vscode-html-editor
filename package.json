@@ -147,6 +147,11 @@
           "type": "boolean",
           "default": true,
           "description": "Enable moving position of elements in preview."
+        },
+        "webVisualEditor.features.elementPanel": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable Figma-like floating element panel."
         }
       }
     }
