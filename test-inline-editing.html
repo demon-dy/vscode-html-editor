@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>内联编辑功能测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            margin: 20px;
+            padding: 20px;
+        }
+        .test-section {
+            margin: 30px 0;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+        .test-element {
+            margin: 15px 0;
+            padding: 15px;
+            background-color: #f0f0f0;
+            border: 2px solid #333;
+            border-radius: 4px;
+        }
+        .highlight {
+            background-color: yellow;
+            color: black;
+            font-weight: bold;
+        }
+        .large-text {
+            font-size: 24px;
+        }
+        .small-text {
+            font-size: 12px;
+        }
+        .bold-text {
+            font-weight: 700;
+        }
+        .light-text {
+            font-weight: 300;
+        }
+        .center-align {
+            text-align: center;
+        }
+        .right-align {
+            text-align: right;
+        }
+        .semi-transparent {
+            opacity: 0.5;
+        }
+        .fixed-size {
+            width: 300px;
+            height: 150px;
+        }
+        .instructions {
+            background-color: #e7f3ff;
+            padding: 15px;
+            border-left: 4px solid #2196F3;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>内联编辑功能测试</h1>
+
+    <div class="instructions">
+        <h3>测试说明</h3>
+        <p>在VSCode中打开此文件，使用可视化编辑器选择下面的元素，然后点击操作栏中的以下字段测试内联编辑功能：</p>
+        <ul>
+            <li><strong>字号</strong> - 数字输入框，单位px</li>
+            <li><strong>粗细</strong> - 下拉选择器，选择100-900</li>
+            <li><strong>对齐方式</strong> - 按钮组，左对齐/居中/右对齐/两端对齐</li>
+            <li><strong>不透明度</strong> - 滑块控件，范围0-100%</li>
+            <li><strong>宽度</strong> - 数字输入框，单位px</li>
+            <li><strong>高度</strong> - 数字输入框，单位px</li>
+        </ul>
+    </div>
+
+    <div class="test-section">
+        <h2>1. 字号测试</h2>
+        <div class="test-element">
+            <p>这是默认字号的文本段落。点击选择此段落，然后点击操作栏中的"字号"字段进行编辑。</p>
+        </div>
+        <div class="test-element large-text">
+            <p>这是大字号文本（24px）。测试修改为其他字号。</p>
+        </div>
+        <div class="test-element small-text">
+            <p>这是小字号文本（12px）。测试修改为其他字号。</p>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>2. 字体粗细测试</h2>
+        <div class="test-element">
+            <p>这是默认粗细（400）的文本。点击"粗细"字段测试选择器。</p>
+        </div>
+        <div class="test-element bold-text">
+            <p>这是粗体文本（700）。测试修改为其他粗细值。</p>
+        </div>
+        <div class="test-element light-text">
+            <p>这是细体文本（300）。测试修改为其他粗细值。</p>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>3. 文本对齐测试</h2>
+        <div class="test-element">
+            <p>这是左对齐文本（默认）。点击"对齐方式"字段测试按钮组控件。</p>
+        </div>
+        <div class="test-element center-align">
+            <p>这是居中对齐的文本。测试修改为其他对齐方式。</p>
+        </div>
+        <div class="test-element right-align">
+            <p>这是右对齐的文本。测试修改为其他对齐方式。</p>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>4. 不透明度测试</h2>
+        <div class="test-element">
+            <p>这是完全不透明的文本（100%）。点击"不透明度"字段测试滑块控件。</p>
+        </div>
+        <div class="test-element semi-transparent">
+            <p>这是半透明文本（50%）。测试修改透明度值。</p>
+        </div>
+        <div class="test-element highlight">
+            <p>这是高亮文本。测试调整透明度看效果变化。</p>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>5. 尺寸测试</h2>
+        <div class="test-element">
+            <div style="background-color: #ffeb3b; padding: 10px;">
+                这是默认尺寸的div容器。点击选择此div，然后测试"宽度"和"高度"字段。
+            </div>
+        </div>
+        <div class="test-element">
+            <div class="fixed-size" style="background-color: #4caf50; padding: 10px; color: white;">
+                这是固定尺寸的div（300px x 150px）。测试修改宽度和高度。
+            </div>
+        </div>
+        <div class="test-element">
+            <div style="width: 200px; height: 100px; background-color: #f44336; padding: 10px; color: white;">
+                这是另一个固定尺寸的div（200px x 100px）。测试调整尺寸。
+            </div>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>6. 综合测试</h2>
+        <div class="test-element">
+            <h3>综合样式元素</h3>
+            <p style="font-size: 18px; font-weight: 600; text-align: center; opacity: 0.8;">
+                这是一个综合了多种样式的段落：18px字号、600粗细、居中对齐、80%不透明度。
+                测试同时修改多个属性。
+            </p>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>测试检查列表</h2>
+        <div class="test-element">
+            <h4>验证以下功能是否正常工作：</h4>
+            <ul>
+                <li>□ 字号编辑器显示正确的当前值</li>
+                <li>□ 字号编辑器能够正确应用新值</li>
+                <li>□ 粗细选择器显示正确的当前值</li>
+                <li>□ 粗细选择器能够正确应用新值</li>
+                <li>□ 对齐方式按钮组显示正确的当前状态</li>
+                <li>□ 对齐方式按钮组能够正确切换对齐</li>
+                <li>□ 不透明度滑块显示正确的当前值</li>
+                <li>□ 不透明度滑块能够实时调整透明度</li>
+                <li>□ 宽度编辑器显示正确的当前值</li>
+                <li>□ 宽度编辑器能够正确调整元素宽度</li>
+                <li>□ 高度编辑器显示正确的当前值</li>
+                <li>□ 高度编辑器能够正确调整元素高度</li>
+                <li>□ 内联编辑器能够正确响应键盘事件（Enter确认，Escape取消）</li>
+                <li>□ 内联编辑器能够正确响应外部点击关闭</li>
+                <li>□ 样式更改能够正确同步到代码编辑器</li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>

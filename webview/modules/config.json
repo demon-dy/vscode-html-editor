@@ -52,15 +52,6 @@
     }
   },
   "features": {
-    "elementPanel": {
-      "description": "Figma风格元素面板",
-      "files": [
-        "modules/ui/ElementPanel.js",
-        "modules/ui/PanelManager.js"
-      ],
-      "dependencies": ["ui"],
-      "enabled": false
-    },
     "dragDrop": {
       "description": "拖拽重排功能",
       "files": [

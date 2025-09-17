@@ -63,7 +63,8 @@ window.WVE.WebVisualEditor = class WebVisualEditor {
       // 初始化工具栏拖拽
       this.toolbarDragHandler = new window.WVE.ToolbarDragHandler(
         this.floatingToolbar.getToolbar(),
-        this.floatingToolbar.getDragHandle()
+        this.floatingToolbar.getDragHandle(),
+        this.floatingToolbar // 传递FloatingToolbar引用用于尺寸显示位置更新
       );
 
       // 初始化交互处理器
@@ -82,7 +83,19 @@ window.WVE.WebVisualEditor = class WebVisualEditor {
         this.eventManager
       );
 
-      // 可选：初始化元素操作面板
+      // 初始化 Figma 风格属性面板（默认）
+      if (window.WVE.PropertyPanel) {
+        this.propertyPanel = new window.WVE.PropertyPanel(
+          this.uiManager,
+          this.stateManager,
+          this.eventManager,
+          null // 新的属性面板不依赖旧的样式管理器
+        );
+        this.propertyPanel.init();
+        this.logger.info('Figma-style property panel initialized');
+      }
+
+      // 可选：初始化旧版元素操作面板（需要配置启用）
       if (window.WVE.PanelManager && window.WVE.ElementPanel) {
         this.panelManager = new window.WVE.PanelManager(
           this.uiManager,
@@ -90,6 +103,17 @@ window.WVE.WebVisualEditor = class WebVisualEditor {
           this.eventManager
         );
         this.panelManager.init();
+        this.logger.info('Legacy panel manager initialized (compatibility mode)');
+      } else if (window.WVE.ElementPanel && !this.propertyPanel) {
+        // 只有在新面板不可用时才使用旧版作为备份
+        this.elementPanel = new window.WVE.ElementPanel(
+          this.uiManager,
+          this.stateManager,
+          this.eventManager,
+          null // 旧版面板的样式管理器已被移除
+        );
+        this.elementPanel.init();
+        this.logger.info('Legacy ElementPanel initialized as fallback');
       }
 
       // 恢复工具栏位置

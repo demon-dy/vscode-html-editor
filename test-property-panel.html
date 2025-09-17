@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Figma 风格属性面板测试</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: 'Inter', system-ui, sans-serif;
+            background: #f0f0f0;
+        }
+
+        .test-container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .test-element {
+            padding: 20px;
+            margin: 20px 0;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+        }
+
+        .test-element:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+        }
+
+        .flex-container {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 12px;
+        }
+
+        .grid-container {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            padding: 20px;
+            background: #2c3e50;
+            color: white;
+            border-radius: 8px;
+        }
+
+        .grid-item {
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            text-align: center;
+        }
+
+        .styled-button {
+            padding: 12px 24px;
+            background: #3498db;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        }
+
+        .styled-button:hover {
+            background: #2980b9;
+        }
+
+        .instructions {
+            background: #e8f5e8;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            border-left: 4px solid #27ae60;
+        }
+
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 10px;
+        }
+
+        h2 {
+            color: #34495e;
+            margin-top: 30px;
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>🎨 Figma 风格属性面板测试</h1>
+
+        <div class="instructions">
+            <h3>📋 测试说明</h3>
+            <p><strong>如何使用：</strong></p>
+            <ol>
+                <li>在 VSCode 中使用 "Web Visual Editor" 扩展打开此文件</li>
+                <li>进入编辑模式</li>
+                <li>选择下面任意一个元素</li>
+                <li>查看右侧的 Figma 风格属性面板</li>
+                <li>尝试修改位置、布局、外观和效果属性</li>
+            </ol>
+            <p><strong>新功能特性：</strong></p>
+            <ul>
+                <li>🎯 <strong>Position</strong> - 位置和对齐控制</li>
+                <li>🔧 <strong>Auto Layout</strong> - 自动布局和 Flexbox 设置</li>
+                <li>🎨 <strong>Appearance</strong> - 外观、填充、描边设置</li>
+                <li>✨ <strong>Effects</strong> - 阴影和模糊效果</li>
+            </ul>
+        </div>
+
+        <h2>🔲 基础元素</h2>
+        <div class="test-element" id="simple-div">
+            <h3>简单 Div 元素</h3>
+            <p>这是一个基础的 div 元素，包含基本的样式。尝试选择它来查看和编辑：</p>
+            <ul>
+                <li>位置属性（Position）</li>
+                <li>外观属性（背景色、圆角、透明度）</li>
+                <li>效果属性（阴影、模糊）</li>
+            </ul>
+        </div>
+
+        <h2>🔄 Flexbox 布局容器</h2>
+        <div class="flex-container" id="flex-container">
+            <div class="flex-item">
+                <h4>项目 1</h4>
+                <p>Flex 项目</p>
+            </div>
+            <div class="flex-item">
+                <h4>项目 2</h4>
+                <p>Flex 项目</p>
+            </div>
+            <div class="flex-item">
+                <h4>项目 3</h4>
+                <p>Flex 项目</p>
+            </div>
+        </div>
+
+        <h2>📋 Grid 布局容器</h2>
+        <div class="grid-container" id="grid-container">
+            <div class="grid-item">网格项目 1</div>
+            <div class="grid-item">网格项目 2</div>
+            <div class="grid-item">网格项目 3</div>
+            <div class="grid-item">网格项目 4</div>
+            <div class="grid-item">网格项目 5</div>
+            <div class="grid-item">网格项目 6</div>
+        </div>
+
+        <h2>🎯 交互元素</h2>
+        <div class="test-element">
+            <button class="styled-button" id="test-button">测试按钮</button>
+            <p>选择上面的按钮来测试对行内元素的属性编辑功能。</p>
+        </div>
+
+        <h2>📝 文本内容</h2>
+        <div class="test-element" id="text-container">
+            <h3 style="color: #e74c3c;">彩色标题</h3>
+            <p style="font-size: 16px; line-height: 1.6;">
+                这是一段包含多种样式的文本内容。你可以选择这个容器来编辑：
+            </p>
+            <ul>
+                <li>字体大小和颜色</li>
+                <li>行高和间距</li>
+                <li>文本对齐方式</li>
+            </ul>
+        </div>
+
+        <h2>🌈 复杂样式元素</h2>
+        <div class="test-element" id="complex-element" style="
+            background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+            color: white;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+            border-radius: 15px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+            transform: rotate(1deg);
+        ">
+            <h3>复杂样式元素</h3>
+            <p>这个元素包含了渐变背景、阴影、变换等复杂样式，非常适合测试属性面板的完整功能。</p>
+        </div>
+
+        <div style="height: 200px;"></div>
+    </div>
+
+    <script>
+        // 为测试元素添加一些交互
+        document.addEventListener('DOMContentLoaded', function() {
+            const button = document.getElementById('test-button');
+            button.addEventListener('click', function() {
+                alert('按钮被点击了！现在你可以在属性面板中编辑它的样式。');
+            });
+
+            // 添加一些调试信息
+            console.log('🎨 Figma 风格属性面板测试页面已加载');
+            console.log('📋 可测试的功能：');
+            console.log('  1. Position - 位置和对齐');
+            console.log('  2. Auto Layout - Flexbox 和布局');
+            console.log('  3. Appearance - 外观和颜色');
+            console.log('  4. Effects - 阴影和效果');
+        });
+    </script>
+</body>
+</html>

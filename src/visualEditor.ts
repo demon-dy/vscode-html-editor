@@ -9,14 +9,12 @@ export class VisualEditorProvider implements vscode.CustomTextEditorProvider {
   public activeCode: vscode.TextDocument | null = null;
 
   private editorOptions = { insertSpaces: true, indentSize: 2, indentChar: ' ', indentUnit: '  ' };
-  private readonly context: vscode.ExtensionContext;
   private readonly codes = new Map<vscode.TextDocument, Set<vscode.WebviewPanel>>();
   private readonly editedBy = new Set<vscode.WebviewPanel>();
   private readonly resources = new Map<string, Set<vscode.TextDocument>>();
   private readonly editQueues = new Map<string, Promise<void>>();
 
-  constructor(private readonly ec: vscode.ExtensionContext) {
-    this.context = ec;
+  constructor(private readonly context: vscode.ExtensionContext) {
     // Get and update indentation setting
     const editorConfig = vscode.workspace.getConfiguration('editor', { languageId: 'html' });
     const insertSpaces = editorConfig.get<boolean>('insertSpaces');
@@ -613,20 +611,25 @@ export class VisualEditorProvider implements vscode.CustomTextEditorProvider {
 
     // 可选功能配置
     const optionalFeatures = {
-      elementPanel: {
-        enabled: config.get<boolean>('features.elementPanel', true),
+      propertyPanel: {
+        enabled: config.get<boolean>('features.propertyPanel', true),
         scripts: [
-          { path: 'modules/ui/PositioningEngine.js', description: '面板定位引擎' },
-          { path: 'modules/ui/panel/TabManager.js', description: '面板标签管理' },
-          { path: 'modules/ui/panel/StyleTab.js', description: '样式标签页' },
-          { path: 'modules/ui/panel/LayoutTab.js', description: '布局标签页' },
-          { path: 'modules/ui/panel/AttributeTab.js', description: '属性标签页' },
-          { path: 'modules/ui/TailwindStyleManager.js', description: 'Tailwind样式管理器（含转换库集成）' },
-          { path: 'modules/ui/StyleEditorPanel.js', description: '复杂样式编辑面板（依赖TailwindStyleManager）' },
-          { path: 'modules/ui/ElementPanel.js', description: 'Figma风格元素面板（依赖前两者）' },
-          { path: 'modules/ui/PanelManager.js', description: '面板管理器' }
+          // Figma 风格属性面板（新架构）
+          { path: 'modules/ui/property-panel/PropertyControls.js', description: '通用属性控件库' },
+          { path: 'modules/ui/property-panel/PropertySectionBase.js', description: '属性区域基础类' },
+          { path: 'modules/ui/property-panel/PositionSection.js', description: 'Position 属性区域' },
+          { path: 'modules/ui/property-panel/AutoLayoutSection.js', description: 'Auto Layout 属性区域' },
+          { path: 'modules/ui/property-panel/AppearanceSection.js', description: 'Appearance 属性区域' },
+          { path: 'modules/ui/property-panel/EffectsSection.js', description: 'Effects 属性区域' },
+          { path: 'modules/ui/property-panel/PropertyPanel.js', description: 'Figma 风格属性面板主类' },
+          // PropertyPanel 是完全自包含的，不需要额外的样式管理模块
         ]
       },
+      // 旧版面板已被移除，此配置保留用于将来可能的扩展
+      // legacyPanels: {
+      //   enabled: false, // 强制禁用，因为文件已删除
+      //   scripts: []
+      // },
       dragDrop: {
         enabled: config.get<boolean>('features.dragDrop', false),
         scripts: [

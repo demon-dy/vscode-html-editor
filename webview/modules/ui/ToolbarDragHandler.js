@@ -3,10 +3,11 @@
  */
 window.WVE = window.WVE || {};
 window.WVE.ToolbarDragHandler = class ToolbarDragHandler {
-  constructor(toolbar, dragHandle) {
+  constructor(toolbar, dragHandle, floatingToolbar = null) {
     this.logger = new window.WVE.Logger('ToolbarDrag');
     this.toolbar = toolbar;
     this.dragHandle = dragHandle;
+    this.floatingToolbar = floatingToolbar;
 
     this.isDragging = false;
     this.startMouseX = 0;
@@ -55,6 +56,11 @@ window.WVE.ToolbarDragHandler = class ToolbarDragHandler {
         this.toolbar.style.left = newLeft + 'px';
         this.toolbar.style.bottom = newBottom + 'px';
         this.toolbar.style.transform = 'none';
+
+        // 如果有尺寸显示，更新其位置
+        if (this.floatingToolbar && this.floatingToolbar.updateDimensionsPosition) {
+          this.floatingToolbar.updateDimensionsPosition();
+        }
 
         this.logger.debug('Toolbar dragged to:', { left: newLeft, bottom: newBottom });
       });

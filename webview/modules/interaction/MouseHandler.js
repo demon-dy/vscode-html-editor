@@ -32,12 +32,14 @@ window.WVE.MouseHandler = class MouseHandler {
     const uiRoot = this.uiManager.getUIRoot?.();
     const toolbar = uiRoot?.querySelector('#wve-floating-toolbar');
     const panel = uiRoot?.querySelector('#wve-style-toolbar') || uiRoot?.querySelector('#wve-element-panel');
+    const propertyPanel = uiRoot?.querySelector('#wve-property-panel');
 
     if (
       (toolbar && (toolbar.contains(event.target) || path.includes(toolbar))) ||
-      (panel && (panel.contains(event.target) || path.includes(panel)))
+      (panel && (panel.contains(event.target) || path.includes(panel))) ||
+      (propertyPanel && (propertyPanel.contains(event.target) || path.includes(propertyPanel)))
     ) {
-      this.logger.debug('Mouse down on toolbar, ignoring');
+      this.logger.debug('Mouse down on UI elements, ignoring');
       return;
     }
 

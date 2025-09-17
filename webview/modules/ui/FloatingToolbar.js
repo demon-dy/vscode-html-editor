@@ -11,6 +11,8 @@ window.WVE.FloatingToolbar = class FloatingToolbar {
 
     this.toolbar = null;
     this.controls = {};
+    this.dimensionsDisplay = null;
+    this.dimensionsUpdateThrottle = null;
 
     this.logger.info('Initializing FloatingToolbar');
   }
@@ -27,7 +29,8 @@ window.WVE.FloatingToolbar = class FloatingToolbar {
     const fragment = new DocumentFragment();
     this.toolbar = document.createElement('div');
     this.toolbar.id = 'wve-floating-toolbar';
-    this.toolbar.className = 'fixed bottom-5 z-50 flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 rounded-full shadow-lg backdrop-blur-sm';
+    this.toolbar.className = 'fixed bottom-5 flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 rounded-full shadow-lg backdrop-blur-sm';
+    this.toolbar.style.zIndex = '50000'; // 确保在属性面板(40000)上方
 
     // 手动设置居中定位，确保兼容性
     this.toolbar.style.left = '50%';
@@ -54,6 +57,9 @@ window.WVE.FloatingToolbar = class FloatingToolbar {
     // 创建工具栏HTML
     this.createToolbarHTML();
 
+    // 创建尺寸显示组件
+    this.createDimensionsDisplay(fragment);
+
     // 渲染到 Shadow DOM 中
     this.uiManager.getUIRoot().appendChild(fragment);
 
@@ -65,6 +71,12 @@ window.WVE.FloatingToolbar = class FloatingToolbar {
 
     // 初始化图标
     this.initIcons();
+
+    // 初始化时显示一次尺寸信息
+    setTimeout(() => {
+      this.updateDimensionsNow();
+      this.showDimensions();
+    }, 500);
 
     this.logger.info('Floating toolbar created successfully');
   }
@@ -120,6 +132,40 @@ window.WVE.FloatingToolbar = class FloatingToolbar {
     `;
 
     this.logger.debug('Toolbar HTML created');
+  }
+
+  /**
+   * 创建尺寸显示组件
+   */
+  createDimensionsDisplay(fragment) {
+    this.dimensionsDisplay = document.createElement('div');
+    this.dimensionsDisplay.id = 'wve-dimensions-display';
+
+    // 使用内联样式确保定位正确
+    Object.assign(this.dimensionsDisplay.style, {
+      position: 'fixed',
+      // 位置将动态计算，基于工具栏位置
+      top: '0px',
+      left: '0px',
+      padding: '8px 16px',
+      backgroundColor: 'rgba(0, 0, 0, 0.9)',
+      color: 'white',
+      fontSize: '14px',
+      fontFamily: 'Consolas, Monaco, "Courier New", monospace',
+      borderRadius: '8px',
+      boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
+      border: '1px solid rgba(255, 255, 255, 0.2)',
+      zIndex: '50001',
+      opacity: '0',
+      transition: 'opacity 0.3s ease',
+      pointerEvents: 'none',
+      whiteSpace: 'nowrap'
+    });
+
+    this.dimensionsDisplay.textContent = '0 × 0';
+
+    fragment.appendChild(this.dimensionsDisplay);
+    this.logger.debug('Dimensions display created with inline styles');
   }
 
   /**
@@ -194,6 +240,23 @@ window.WVE.FloatingToolbar = class FloatingToolbar {
 
     // 初始化模式状态
     this.applyModeState();
+
+    // 监听窗口大小变化（屏幕缩放等）
+    window.addEventListener('resize', () => {
+      this.showDimensions();
+    });
+
+    // 添加快捷键：按 D 键显示尺寸信息
+    document.addEventListener('keydown', (e) => {
+      if ((e.key === 'd' || e.key === 'D') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        // 确保不在输入框中
+        if (!['INPUT', 'TEXTAREA'].includes(e.target.tagName)) {
+          e.preventDefault();
+          this.showDimensions();
+          this.logger.debug('Dimensions display triggered by keyboard shortcut');
+        }
+      }
+    });
 
     this.logger.debug('Toolbar events bound successfully');
   }
@@ -339,6 +402,9 @@ window.WVE.FloatingToolbar = class FloatingToolbar {
       }
     }
 
+    // 显示尺寸信息
+    this.showDimensions();
+
     this.logger.debug('Zoom updated:', this.stateManager.zoom);
   }
 
@@ -383,6 +449,9 @@ window.WVE.FloatingToolbar = class FloatingToolbar {
       document.body.style.minHeight = '';
       document.body.removeAttribute('data-device-type');
     }
+
+    // 显示尺寸信息
+    setTimeout(() => this.showDimensions(), 100); // 延迟一点让DOM更新完成
   }
 
   /**
@@ -390,6 +459,100 @@ window.WVE.FloatingToolbar = class FloatingToolbar {
    */
   getToolbar() {
     return this.toolbar;
+  }
+
+  /**
+   * 更新尺寸显示位置（基于工具栏位置）
+   */
+  updateDimensionsPosition() {
+    if (!this.dimensionsDisplay || !this.toolbar) {
+      return;
+    }
+
+    const toolbarRect = this.toolbar.getBoundingClientRect();
+    const displayRect = this.dimensionsDisplay.getBoundingClientRect();
+
+    // 计算位置：工具栏上方16px，水平居中对齐工具栏
+    const top = toolbarRect.top - displayRect.height - 16;
+    const left = toolbarRect.left + (toolbarRect.width - displayRect.width) / 2;
+
+    // 确保不超出屏幕边界
+    const finalTop = Math.max(10, top); // 距离顶部至少10px
+    const finalLeft = Math.max(10, Math.min(window.innerWidth - displayRect.width - 10, left));
+
+    this.dimensionsDisplay.style.top = finalTop + 'px';
+    this.dimensionsDisplay.style.left = finalLeft + 'px';
+  }
+
+  /**
+   * 显示尺寸信息
+   */
+  showDimensions() {
+    if (!this.dimensionsDisplay) {
+      this.logger.warn('Dimensions display not found');
+      return;
+    }
+
+    this.updateDimensions();
+    this.updateDimensionsPosition(); // 更新位置
+    this.dimensionsDisplay.style.opacity = '1';
+
+    // 调试信息
+    const rect = this.dimensionsDisplay.getBoundingClientRect();
+    this.logger.debug('Dimensions display shown:', {
+      content: this.dimensionsDisplay.textContent,
+      position: { top: rect.top, left: rect.left, width: rect.width, height: rect.height },
+      toolbarPosition: this.toolbar ? this.toolbar.getBoundingClientRect() : null
+    });
+
+    // 3秒后自动隐藏
+    clearTimeout(this.dimensionsHideTimeout);
+    this.dimensionsHideTimeout = setTimeout(() => {
+      this.hideDimensions();
+    }, 3000);
+  }
+
+  /**
+   * 隐藏尺寸信息
+   */
+  hideDimensions() {
+    if (!this.dimensionsDisplay) {
+      return;
+    }
+    this.dimensionsDisplay.style.opacity = '0';
+  }
+
+  /**
+   * 更新尺寸信息（带节流）
+   */
+  updateDimensions() {
+    if (this.dimensionsUpdateThrottle) {
+      clearTimeout(this.dimensionsUpdateThrottle);
+    }
+
+    this.dimensionsUpdateThrottle = setTimeout(() => {
+      this.updateDimensionsNow();
+    }, 150); // 150ms节流，平衡性能和响应性
+  }
+
+  /**
+   * 立即更新尺寸信息
+   */
+  updateDimensionsNow() {
+    if (!this.dimensionsDisplay) {
+      return;
+    }
+
+    const body = document.body;
+    const rect = body.getBoundingClientRect();
+    const zoom = this.stateManager.zoom;
+
+    // 计算实际渲染尺寸（考虑缩放）
+    const actualWidth = Math.round(rect.width / zoom);
+    const actualHeight = Math.round(rect.height / zoom);
+
+    this.dimensionsDisplay.textContent = `${actualWidth} × ${actualHeight} (${Math.round(zoom * 100)}%)`;
+    this.logger.debug(`Dimensions updated: ${actualWidth}×${actualHeight} at ${Math.round(zoom * 100)}%`);
   }
 
   /**
