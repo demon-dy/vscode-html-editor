@@ -35,6 +35,9 @@ window.WVE.UIManager = class UIManager {
     // 以便 Shadow 内的 UI 也能使用通用的 utility 类（Play CDN 不会自动作用于 ShadowRoot）。
     this.adoptTailwindStyles();
 
+    // 设置动态任意值检测
+    this.setupDynamicArbitraryValueDetection();
+
     this.logger.info('UI root initialized successfully');
   }
 
@@ -224,6 +227,9 @@ window.WVE.UIManager = class UIManager {
 
       waitForTailwind()
         .then(() => {
+          // 预先扫描已有内容中的任意值类
+          this.scanExistingArbitraryClasses();
+
           // 强制触发 Tailwind 初始扫描
           this.triggerTailwindScan();
 
@@ -290,7 +296,7 @@ window.WVE.UIManager = class UIManager {
               <div class="m-0 m-1 m-2 m-3 m-4 mx-1 mx-2 mx-3 mx-4 my-1 my-2 my-3 my-4">
                 <div class="rounded rounded-md rounded-lg rounded-full rounded-none border border-0 border-2">
                   <div class="border-gray-200 border-gray-300 border-blue-500 bg-white bg-gray-50 bg-gray-100 bg-gray-200">
-                    <div class="bg-gray-800 bg-gray-900 bg-blue-500 bg-blue-600 bg-red-500 bg-green-500">
+                    <div class="bg-gray-800 bg-gray-900 bg-blue-500 bg-blue-600 bg-red-500 bg-green-500 bg-[#444444] bg-[#383838]">
                       <div class="text-gray-400 text-gray-500 text-gray-600 text-gray-700 text-gray-800 text-gray-900">
                         <div class="text-white text-blue-500 text-red-500 text-green-500 text-xs text-sm text-base text-lg">
                           <div class="font-normal font-medium font-semibold font-bold cursor-pointer cursor-grab cursor-grabbing">
@@ -416,23 +422,8 @@ window.WVE.UIManager = class UIManager {
    * 设置样式同步机制
    */
   setupStyleSynchronization() {
-    // 监听 Shadow DOM 内的变化，自动触发 Tailwind 重新扫描
-    const shadowObserver = new MutationObserver(() => {
-      // 当 Shadow DOM 内容发生变化时，延迟触发 Tailwind 重新扫描
-      clearTimeout(this.syncTimeout);
-      this.syncTimeout = setTimeout(() => {
-        this.refreshTailwindStyles();
-      }, 100);
-    });
-
-    shadowObserver.observe(this.uiRoot, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-      attributeFilter: ['class']
-    });
-
-    this.logger.debug('Style synchronization observer set up');
+    // 注意：样式同步现在集成在动态任意值检测中，避免重复监听
+    this.logger.debug('Style synchronization integrated with dynamic arbitrary value detection');
   }
 
   /**
@@ -512,6 +503,181 @@ window.WVE.UIManager = class UIManager {
   syncTailwindStyles() {
     this.logger.debug('Manual Tailwind style sync triggered');
     this.refreshTailwindStyles();
+  }
+
+  /**
+   * 手动生成任意值类的样式
+   * @param {string} htmlContent - 包含任意值类的 HTML 内容
+   */
+  generateArbitraryStyles(htmlContent) {
+    this.logger.debug('Manual arbitrary styles generation triggered');
+    this.detectAndGenerateArbitraryValues(htmlContent);
+  }
+
+  /**
+   * 动态检测并生成任意值的 Tailwind 类
+   * @param {string} content - 包含 Tailwind 类的内容
+   */
+  detectAndGenerateArbitraryValues(content) {
+    if (!content) return;
+
+    // 匹配所有任意值的 Tailwind 类，如 bg-[#444444], w-[100px], text-[14px] 等
+    const arbitraryValueRegex = /\b[\w-]+\[([^\]]+)\]/g;
+    const matches = content.match(arbitraryValueRegex) || [];
+
+    if (matches.length === 0) return;
+
+    this.logger.debug(`Detected arbitrary value classes:`, matches);
+
+    // 检查 Tailwind CDN 是否可用
+    if (!window.tailwind) {
+      this.logger.warn('Tailwind CDN not available, deferring arbitrary value generation');
+      // 延迟重试
+      setTimeout(() => {
+        this.detectAndGenerateArbitraryValues(content);
+      }, 500);
+      return;
+    }
+
+    // 创建临时元素来触发这些类的生成
+    const tempElement = document.createElement('div');
+    tempElement.style.cssText = 'position: absolute; left: -9999px; top: -9999px; opacity: 0; pointer-events: none;';
+    tempElement.className = matches.join(' ');
+
+    document.body.appendChild(tempElement);
+
+    // 触发 Tailwind 扫描
+    if (typeof window.tailwind.refresh === 'function') {
+      window.tailwind.refresh();
+    }
+
+    // 延迟移除元素并同步样式，给 Tailwind 足够时间生成样式
+    setTimeout(() => {
+      try {
+        document.body.removeChild(tempElement);
+      } catch (e) {
+        // 元素可能已经被移除了
+      }
+      this.refreshTailwindStyles();
+    }, 200); // 增加延迟到200ms，确保样式生成完成
+  }
+
+  /**
+   * 监听 Shadow DOM 内容变化，自动检测并生成任意值类
+   */
+  setupDynamicArbitraryValueDetection() {
+    if (!this.uiRoot) return;
+
+    const observer = new MutationObserver((mutations) => {
+      const arbitraryClassesToGenerate = new Set();
+
+      mutations.forEach((mutation) => {
+        // 检查新增的节点
+        mutation.addedNodes.forEach((node) => {
+          if (node.nodeType === Node.ELEMENT_NODE) {
+            this.extractArbitraryClasses(node, arbitraryClassesToGenerate);
+          }
+        });
+
+        // 检查属性变化（特别是 class 属性）
+        if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
+          const target = mutation.target;
+          if (target.nodeType === Node.ELEMENT_NODE) {
+            this.extractArbitraryClasses(target, arbitraryClassesToGenerate);
+          }
+        }
+      });
+
+      // 如果发现新的任意值类，生成它们
+      if (arbitraryClassesToGenerate.size > 0) {
+        const classesToGenerate = Array.from(arbitraryClassesToGenerate).join(' ');
+        this.logger.debug('Auto-detected new arbitrary classes:', classesToGenerate);
+        this.detectAndGenerateArbitraryValues(classesToGenerate);
+      }
+    });
+
+    observer.observe(this.uiRoot, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['class']
+    });
+
+    this.dynamicArbitraryObserver = observer;
+    this.logger.debug('Dynamic arbitrary value detection set up');
+
+    // 立即扫描一次已有内容，确保初始化时的内容也被检测到
+    setTimeout(() => {
+      this.scanExistingArbitraryClasses();
+    }, 0);
+  }
+
+  /**
+   * 从元素及其后代中提取任意值类
+   */
+  extractArbitraryClasses(element, classSet) {
+    // 检查元素本身的类
+    if (element.className) {
+      const className = typeof element.className === 'string' ? element.className : element.className.toString();
+      const arbitraryValueRegex = /\b[\w-]+\[([^\]]+)\]/g;
+      const matches = className.match(arbitraryValueRegex) || [];
+      matches.forEach(cls => classSet.add(cls));
+    }
+
+    // 递归检查所有后代元素
+    const descendants = element.querySelectorAll('*[class]');
+    descendants.forEach(desc => {
+      if (desc.className) {
+        const className = typeof desc.className === 'string' ? desc.className : desc.className.toString();
+        const arbitraryValueRegex = /\b[\w-]+\[([^\]]+)\]/g;
+        const matches = className.match(arbitraryValueRegex) || [];
+        matches.forEach(cls => classSet.add(cls));
+      }
+    });
+  }
+
+  /**
+   * 扫描现有内容中的任意值类并预先生成
+   */
+  scanExistingArbitraryClasses() {
+    if (!this.uiRoot) return;
+
+    this.logger.debug('Scanning existing arbitrary classes in Shadow DOM');
+
+    const arbitraryClasses = new Set();
+
+    // 扫描Shadow DOM中已有的所有元素，包括根元素本身
+    const allElements = this.uiRoot.querySelectorAll('*');
+
+    // 还要扫描根元素的直接子元素的innerHTML内容
+    allElements.forEach(element => {
+      // 扫描元素的class属性
+      if (element.className) {
+        const className = typeof element.className === 'string' ? element.className : element.className.toString();
+        const arbitraryValueRegex = /\b[\w-]+\[([^\]]+)\]/g;
+        const matches = className.match(arbitraryValueRegex) || [];
+        matches.forEach(cls => arbitraryClasses.add(cls));
+      }
+
+      // 扫描元素的innerHTML中的任意值类（用于动态生成的HTML）
+      if (element.innerHTML) {
+        const arbitraryValueRegex = /\bclass\s*=\s*["'][^"']*[\w-]+\[([^\]]+)\][^"']*["']/g;
+        let match;
+        while ((match = arbitraryValueRegex.exec(element.innerHTML)) !== null) {
+          const classAttr = match[0];
+          const arbitraryMatches = classAttr.match(/\b[\w-]+\[([^\]]+)\]/g) || [];
+          arbitraryMatches.forEach(cls => arbitraryClasses.add(cls));
+        }
+      }
+    });
+
+    if (arbitraryClasses.size > 0) {
+      const classesToGenerate = Array.from(arbitraryClasses).join(' ');
+      this.logger.info('Pre-generating arbitrary classes found in Shadow DOM:', Array.from(arbitraryClasses));
+      this.detectAndGenerateArbitraryValues(classesToGenerate);
+    } else {
+      this.logger.debug('No arbitrary classes found in existing Shadow DOM content');
+    }
   }
 
   /**

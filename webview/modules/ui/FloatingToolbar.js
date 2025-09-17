@@ -29,7 +29,7 @@ window.WVE.FloatingToolbar = class FloatingToolbar {
     const fragment = new DocumentFragment();
     this.toolbar = document.createElement('div');
     this.toolbar.id = 'wve-floating-toolbar';
-    this.toolbar.className = 'fixed bottom-5 flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 rounded-full shadow-lg backdrop-blur-sm';
+    this.toolbar.className = 'fixed bottom-5 flex items-center px-3 py-2 bg-gray-800 rounded-lg shadow-xl backdrop-blur-sm';
     this.toolbar.style.zIndex = '50000'; // 确保在属性面板(40000)上方
 
     // 手动设置居中定位，确保兼容性
@@ -88,47 +88,56 @@ window.WVE.FloatingToolbar = class FloatingToolbar {
     const c = this.controls;
 
     this.toolbar.innerHTML = `
-      <div class="flex items-center cursor-grab hover:bg-gray-100 rounded p-1 transition-colors" id="${c.toolbarDragHandle}" title="拖拽移动工具栏">
+      <!-- 拖拽手柄 -->
+      <div class="flex items-center cursor-grab hover:bg-gray-700 rounded p-1 transition-colors mr-2" id="${c.toolbarDragHandle}" title="拖拽移动工具栏">
         <i data-lucide="grip-vertical" class="w-3 h-3 text-gray-500"></i>
       </div>
+
+      <!-- 常规操作区域 -->
       <div class="flex items-center gap-1">
-        <button id="${c.toolbarLinkCode}" type="button" class="flex items-center justify-center w-8 h-8 rounded-md hover:bg-gray-100 text-gray-600 hover:text-gray-800 transition-colors" title="关联代码">
+        <button id="${c.toolbarLinkCode}" type="button" class="flex items-center justify-center w-8 h-8 rounded hover:bg-gray-700 text-gray-400 hover:text-white transition-all duration-200" title="关联代码">
           <i data-lucide="link" class="w-4 h-4"></i>
         </button>
-        <button id="${c.toolbarRefresh}" type="button" class="flex items-center justify-center w-8 h-8 rounded-md hover:bg-gray-100 text-gray-600 hover:text-gray-800 transition-colors" title="刷新视图">
+        <button id="${c.toolbarRefresh}" type="button" class="flex items-center justify-center w-8 h-8 rounded hover:bg-gray-700 text-gray-400 hover:text-white transition-all duration-200" title="刷新视图">
           <i data-lucide="refresh-cw" class="w-4 h-4"></i>
         </button>
-        <button id="${c.toolbarZoomIn}" type="button" class="flex items-center justify-center w-8 h-8 rounded-md hover:bg-gray-100 text-gray-600 hover:text-gray-800 transition-colors" title="放大视图">
-          <i data-lucide="zoom-in" class="w-4 h-4"></i>
-        </button>
-        <span id="${c.toolbarZoomValue}" class="px-2 py-1 text-xs font-medium text-gray-600 bg-gray-100 rounded">100%</span>
-        <button id="${c.toolbarZoomOut}" type="button" class="flex items-center justify-center w-8 h-8 rounded-md hover:bg-gray-100 text-gray-600 hover:text-gray-800 transition-colors" title="缩小视图">
-          <i data-lucide="zoom-out" class="w-4 h-4"></i>
-        </button>
-        <select id="${c.toolbarDeviceSelector}" class="px-2 py-1 text-xs font-medium bg-gray-100 border-0 rounded cursor-pointer hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500" title="设备预览">
-          <option value="desktop">1440×900 桌面</option>
-          <option value="laptop">1024×768 笔记本</option>
-          <option value="tablet">768×1024 平板</option>
-          <option value="mobile-large">414×896 大屏手机</option>
-          <option value="mobile-medium">375×667 中屏手机</option>
-          <option value="mobile-small">320×568 小屏手机</option>
+        <div class="flex bg-[#444444] rounded">
+          <button id="${c.toolbarZoomOut}" type="button" class="flex items-center justify-center w-8 h-8 rounded hover:bg-gray-700 text-gray-400 hover:text-white transition-all duration-200" title="缩小视图">
+            <i data-lucide="zoom-out" class="w-4 h-4"></i>
+          </button>
+          <span id="${c.toolbarZoomValue}" class="py-1 text-sm font-medium text-gray-300 bg-gray-700 rounded min-w-16 text-center mx-1">100%</span>
+          <button id="${c.toolbarZoomIn}" type="button" class="flex items-center justify-center w-8 h-8 rounded hover:bg-gray-700 text-gray-400 hover:text-white transition-all duration-200" title="放大视图">
+            <i data-lucide="zoom-in" class="w-4 h-4"></i>
+          </button>
+        </div>
+        <select id="${c.toolbarDeviceSelector}" class="px-2 py-2 text-xs bg-[#444444] text-gray-400 border-0 rounded cursor-pointer hover:bg-[#383838] ml-1" title="设备预览">
+          <option value="desktop" style="background-color: #374151; color: #d1d5db;">1440 桌面</option>
+          <option value="laptop" style="background-color: #374151; color: #d1d5db;">1024 笔记本</option>
+          <option value="tablet" style="background-color: #374151; color: #d1d5db;">768 平板</option>
+          <option value="mobile-large" style="background-color: #374151; color: #d1d5db;">414 大屏手机</option>
+          <option value="mobile-medium" style="background-color: #374151; color: #d1d5db;">375 中屏手机</option>
+          <option value="mobile-small" style="background-color: #374151; color: #d1d5db;">320 小屏手机</option>
         </select>
-        </div>
-        
-        <div class="flex items-center gap-1" role="radiogroup" aria-label="模式切换">
-          <label id="${c.toolbarEditModeLabel}" class="flex" role="radio" aria-checked="true" tabindex="0" title="编辑模式">
-            <input id="${c.toolbarEditMode}" class="wve-mode-radio" type="radio" name="wve-mode" value="edit" checked>
-            <span id="${c.toolbarEditModeButton}" class="flex items-center justify-center w-8 h-8 rounded-md hover:bg-gray-100 text-gray-600 hover:text-gray-800 transition-colors">
-              <i data-lucide="edit-3" class="w-4 h-4"></i>
-            </span>
-          </label>
-          <label id="${c.toolbarPreviewModeLabel}" class="flex" role="radio" aria-checked="false" tabindex="-1" title="预览模式">
-            <input id="${c.toolbarPreviewMode}" class="wve-mode-radio" type="radio" name="wve-mode" value="preview">
-            <span id="${c.toolbarPreviewModeButton}" class="flex items-center justify-center w-8 h-8 rounded-md hover:bg-gray-100 text-gray-600 hover:text-gray-800 transition-colors">
-              <i data-lucide="eye" class="w-4 h-4"></i>
-            </span>
-          </label>
-        </div>
+      </div>
+
+      <!-- 分割线 -->
+      <div class="w-[1px] h-[32px] mx-3 bg-[#444444]"></div>
+
+      <!-- 模式选择区域 -->
+      <div class="flex items-center bg-[#444444] rounded gap-1" role="radiogroup" aria-label="模式切换">
+        <label id="${c.toolbarEditModeLabel}" class="flex" role="radio" aria-checked="true" tabindex="0" title="编辑模式">
+          <input id="${c.toolbarEditMode}" class="wve-mode-radio" type="radio" name="wve-mode" value="edit" checked>
+          <span id="${c.toolbarEditModeButton}" class="flex items-center justify-center w-8 h-8 rounded text-gray-300 hover:text-white hover:bg-gray-600 transition-all duration-200">
+            <i data-lucide="edit-3" class="w-4 h-4"></i>
+          </span>
+        </label>
+        <label id="${c.toolbarPreviewModeLabel}" class="flex" role="radio" aria-checked="false" tabindex="-1" title="预览模式">
+          <input id="${c.toolbarPreviewMode}" class="wve-mode-radio" type="radio" name="wve-mode" value="preview">
+          <span id="${c.toolbarPreviewModeButton}" class="flex items-center justify-center w-8 h-8 rounded text-gray-300 hover:text-white hover:bg-gray-600 transition-all duration-200">
+            <i data-lucide="eye" class="w-4 h-4"></i>
+          </span>
+        </label>
+      </div>
     `;
 
     this.logger.debug('Toolbar HTML created');
@@ -268,6 +277,45 @@ window.WVE.FloatingToolbar = class FloatingToolbar {
     this.logger.debug('Initializing toolbar icons');
     window.WVE.LucideIcons.initialize();
     window.WVE.LucideIcons.replaceInRoot(this.uiManager.getUIRoot());
+
+    // 添加设备选择器的自定义样式
+    this.addDeviceSelectorStyles();
+  }
+
+  /**
+   * 添加设备选择器的自定义样式
+   */
+  addDeviceSelectorStyles() {
+    const styleId = 'wve-device-selector-styles';
+    const uiRoot = this.uiManager.getUIRoot();
+
+    // 检查是否已经添加了样式
+    if (uiRoot.getElementById && uiRoot.getElementById(styleId)) {
+      return;
+    }
+
+    const style = document.createElement('style');
+    style.id = styleId;
+    style.textContent = `
+      .device-selector option {
+        background-color: #374151 !important;
+        color: #d1d5db !important;
+        padding: 8px 12px !important;
+      }
+
+      .device-selector option:hover {
+        background-color: #4b5563 !important;
+        color: #ffffff !important;
+      }
+
+      .device-selector option:checked {
+        background-color: #2563eb !important;
+        color: #ffffff !important;
+      }
+    `;
+
+    uiRoot.appendChild(style);
+    this.logger.debug('Device selector styles added');
   }
 
   /**
@@ -306,8 +354,18 @@ window.WVE.FloatingToolbar = class FloatingToolbar {
     this.toolbarEditModeLabel?.setAttribute('aria-checked', String(isEditMode));
     this.toolbarPreviewModeLabel?.setAttribute('aria-checked', String(isPreviewMode));
 
-    this.toolbarEditModeButton?.classList.toggle('active', isEditMode);
-    this.toolbarPreviewModeButton?.classList.toggle('active', isPreviewMode);
+    // 更新按钮选中状态样式
+    if (this.toolbarEditModeButton) {
+      this.toolbarEditModeButton.classList.toggle('bg-blue-600', isEditMode);
+      this.toolbarEditModeButton.classList.toggle('text-white', isEditMode);
+      this.toolbarEditModeButton.classList.toggle('shadow-sm', isEditMode);
+    }
+
+    if (this.toolbarPreviewModeButton) {
+      this.toolbarPreviewModeButton.classList.toggle('bg-blue-600', isPreviewMode);
+      this.toolbarPreviewModeButton.classList.toggle('text-white', isPreviewMode);
+      this.toolbarPreviewModeButton.classList.toggle('shadow-sm', isPreviewMode);
+    }
 
     if (this.toolbarEditModeLabel) {
       this.toolbarEditModeLabel.setAttribute('tabindex', isEditMode ? '0' : '-1');
@@ -413,10 +471,12 @@ window.WVE.FloatingToolbar = class FloatingToolbar {
    */
   updateLinkCodeButton() {
     if (this.stateManager.linkCode) {
-      this.toolbarLinkCode.classList.add('active');
+      this.toolbarLinkCode.classList.add('bg-blue-600', 'text-white');
+      this.toolbarLinkCode.classList.remove('text-gray-400', 'hover:text-white');
       this.toolbarLinkCode.title = '关联代码 (已启用)';
     } else {
-      this.toolbarLinkCode.classList.remove('active');
+      this.toolbarLinkCode.classList.remove('bg-blue-600', 'text-white');
+      this.toolbarLinkCode.classList.add('text-gray-400', 'hover:text-white');
       this.toolbarLinkCode.title = '关联代码 (已禁用)';
     }
 
