@@ -350,9 +350,14 @@ window.WVE.ElementPanel = class ElementPanel {
       { type: 'field', id: 'backgroundColor', icon: 'paintbrush', label: '背景色', editable: 'panel', panelType: 'color' },
       { type: 'field', id: 'backgroundImage', icon: 'image', label: '背景图片', editable: 'panel', panelType: 'image' },
       { type: 'field', id: 'border', icon: 'square-dashed', label: '描边', editable: 'panel', panelType: 'border' },
-      { type: 'field', id: 'borderRadius', icon: 'radius', label: '圆角', editable: 'inline', inputType: 'number', suffix: 'px' },
+      { type: 'field', id: 'borderRadius', icon: 'radius', label: '圆角', editable: 'panel', panelType: 'border-radius' },
       { type: 'divider' },
-      { type: 'field', id: 'display', icon: 'layout-dashboard', label: '布局', editable: 'panel', panelType: 'display' },
+      { type: 'field', id: 'display', icon: 'layout-dashboard', label: '显示类型', editable: 'panel', panelType: 'display' },
+      { type: 'field', id: 'position', icon: 'move', label: '定位', editable: 'panel', panelType: 'position' },
+      { type: 'field', id: 'flexDirection', icon: 'arrow-right', label: 'Flex方向', editable: 'panel', panelType: 'flex-direction' },
+      { type: 'field', id: 'justifyContent', icon: 'align-horizontal-space-between', label: '主轴对齐', editable: 'panel', panelType: 'justify-content' },
+      { type: 'field', id: 'alignItems', icon: 'align-vertical-space-between', label: '交叉轴对齐', editable: 'panel', panelType: 'align-items' },
+      { type: 'field', id: 'gap', icon: 'space-between-horizontal', label: '间距', editable: 'panel', panelType: 'gap' },
       { type: 'field', id: 'padding', icon: 'shrink', label: '内边距', editable: 'panel', panelType: 'box-model' },
       { type: 'field', id: 'margin', icon: 'expand', label: '外边距', editable: 'panel', panelType: 'box-model' },
       { type: 'divider' },
@@ -660,16 +665,18 @@ window.WVE.ElementPanel = class ElementPanel {
   }
 
   handleStyleChange(event) {
-    const { element } = event.detail || {};
+    const { element, property } = event.detail || {};
 
     // 如果样式变更是针对当前选中的元素，延迟刷新显示
     if (element === this.currentTarget) {
+      // 使用更长的延迟确保样式已完全应用
       setTimeout(() => {
         // 确保 StyleEditorPanel 的抑制刷新状态已清除
         if (!this.styleEditorPanel || !this.styleEditorPanel.suppressRefresh) {
           this.updateValues(this.currentTarget);
+          this.logger.debug('Updated ElementPanel values after style change:', property);
         }
-      }, 100);
+      }, 200);
     }
   }
 
@@ -851,6 +858,11 @@ window.WVE.ElementPanel = class ElementPanel {
       border: this.toBorder(style),
       borderRadius: this.toRadius(style.borderRadius),
       display: this.toText(style.display),
+      position: this.toText(style.position),
+      flexDirection: this.toText(style.flexDirection),
+      justifyContent: this.toText(style.justifyContent),
+      alignItems: this.toText(style.alignItems),
+      gap: this.toText(style.gap),
       padding: this.toBoxValues(style, 'padding'),
       margin: this.toBoxValues(style, 'margin'),
       fontSize: this.toText(style.fontSize),
@@ -871,6 +883,11 @@ window.WVE.ElementPanel = class ElementPanel {
       border: placeholder,
       borderRadius: placeholder,
       display: placeholder,
+      position: placeholder,
+      flexDirection: placeholder,
+      justifyContent: placeholder,
+      alignItems: placeholder,
+      gap: placeholder,
       padding: placeholder,
       margin: placeholder,
       fontSize: placeholder,
@@ -926,7 +943,24 @@ window.WVE.ElementPanel = class ElementPanel {
   toRadius(value) {
     const text = (value || '').trim();
     if (!text || text === '0px') return { text: '0', isEmpty: text === '' };
+
+    // 解析圆角值，支持简写形式
+    const parts = text.split(/\s+/).filter(p => p);
+    if (parts.length === 1) {
+      const singleValue = this.extractNumericValue(parts[0]);
+      return { text: singleValue ? `${singleValue}px` : text };
+    } else if (parts.length > 1) {
+      // 多个值的情况，显示为复合值
+      return { text: '多值' };
+    }
+
     return { text };
+  }
+
+  // 提取圆角的数值部分
+  extractNumericValue(value) {
+    const match = value.match(/^(\d+(?:\.\d+)?)/);
+    return match ? parseFloat(match[1]) : null;
   }
 
   toBoxValues(style, name) {
@@ -1193,13 +1227,18 @@ window.WVE.ElementPanel = class ElementPanel {
     }
 
     const fieldId = field.dataset.field;
+    this.logger.info('Field clicked:', fieldId);
+
     const meta = this.getFieldMeta(fieldId);
+    this.logger.info('Field meta:', meta);
 
     if (!meta || !meta.editable) {
+      this.logger.warn('Field not editable or meta not found:', fieldId);
       return;
     }
 
     if (meta.editable === 'panel') {
+      this.logger.info('Opening style panel for:', fieldId, meta.panelType);
       this.openStylePanel(field, meta);
     }
   }
@@ -1212,6 +1251,13 @@ window.WVE.ElementPanel = class ElementPanel {
     const schema = [
       { type: 'field', id: 'backgroundColor', icon: 'paintbrush', label: '背景色', editable: 'panel', panelType: 'color' },
       { type: 'field', id: 'fontColor', icon: 'underline', label: '字体颜色', editable: 'panel', panelType: 'color' },
+      { type: 'field', id: 'borderRadius', icon: 'radius', label: '圆角', editable: 'panel', panelType: 'border-radius' },
+      { type: 'field', id: 'display', icon: 'layout-dashboard', label: '显示类型', editable: 'panel', panelType: 'display' },
+      { type: 'field', id: 'position', icon: 'move', label: '定位', editable: 'panel', panelType: 'position' },
+      { type: 'field', id: 'flexDirection', icon: 'arrow-right', label: 'Flex方向', editable: 'panel', panelType: 'flex-direction' },
+      { type: 'field', id: 'justifyContent', icon: 'align-horizontal-space-between', label: '主轴对齐', editable: 'panel', panelType: 'justify-content' },
+      { type: 'field', id: 'alignItems', icon: 'align-vertical-space-between', label: '交叉轴对齐', editable: 'panel', panelType: 'align-items' },
+      { type: 'field', id: 'gap', icon: 'space-between-horizontal', label: '间距', editable: 'panel', panelType: 'gap' },
       { type: 'field', id: 'padding', icon: 'shrink', label: '内边距', editable: 'panel', panelType: 'box-model' },
       { type: 'field', id: 'margin', icon: 'expand', label: '外边距', editable: 'panel', panelType: 'box-model' }
     ];
@@ -1227,6 +1273,13 @@ window.WVE.ElementPanel = class ElementPanel {
       this.logger.warn('StyleEditorPanel not initialized');
       return;
     }
+
+    this.logger.info('Calling styleEditorPanel.open with:', {
+      panelType: meta.panelType,
+      fieldId: meta.id,
+      currentTarget: this.currentTarget,
+      field: field
+    });
 
     this.styleEditorPanel.open(meta.panelType, meta.id, this.currentTarget, field);
   }

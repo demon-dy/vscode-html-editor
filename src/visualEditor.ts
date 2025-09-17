@@ -272,7 +272,9 @@ export class VisualEditorProvider implements vscode.CustomTextEditorProvider {
   }
 
   private async applyElementEditWithRetry(code: vscode.TextDocument, codeEdit: any) {
-    const maxAttempts = 3;
+    const maxAttempts = 5; // 增加重试次数
+    let lastError: any = null;
+
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
       const versionBefore = code.version;
       const range = this.resolveCurrentRange(code, codeEdit);
@@ -288,23 +290,31 @@ export class VisualEditorProvider implements vscode.CustomTextEditorProvider {
       try {
         const applied = await vscode.workspace.applyEdit(edit);
         if (applied) {
+          console.log(`Style edit applied successfully on attempt ${attempt + 1}`);
           return;
         }
+        console.warn(`Style edit not applied on attempt ${attempt + 1}, will retry`);
       } catch (error) {
+        lastError = error;
         if (!this.isDocumentChangedError(error)) {
           throw error;
         }
-        // Document changed error is expected in concurrent editing scenarios
-        // The retry mechanism will handle this automatically
+        console.warn(`Document changed error on attempt ${attempt + 1}, retrying...`);
       }
 
       if (code.version === versionBefore) {
         // 文档版本未更新，说明失败不是由于外部修改导致，避免死循环
+        console.warn('Document version unchanged, stopping retry to avoid infinite loop');
         break;
       }
-      // 等待下一轮循环基于最新文档重新计算位置
-      await new Promise(resolve => setTimeout(resolve, 0));
+
+      // 增加指数退避延迟，减少冲突概率
+      const backoffDelay = Math.min(100 * Math.pow(2, attempt), 1000);
+      await new Promise(resolve => setTimeout(resolve, backoffDelay));
     }
+
+    // 所有重试都失败后，记录详细错误信息
+    console.error(`Failed to apply style edit after ${maxAttempts} attempts. Last error:`, lastError);
   }
 
   private resolveCurrentRange(code: vscode.TextDocument, codeEdit: any): vscode.Range | null {
@@ -975,6 +985,50 @@ export class VisualEditorProvider implements vscode.CustomTextEditorProvider {
   }
 
   /**
+   * 使用重试机制应用Tailwind样式编辑
+   */
+  private async applyTailwindEditsWithRetry(textDocument: vscode.TextDocument, edits: vscode.TextEdit[]): Promise<void> {
+    const maxAttempts = 5;
+    let lastError: any = null;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      const versionBefore = textDocument.version;
+
+      try {
+        // 创建工作区编辑
+        const workspaceEdit = new vscode.WorkspaceEdit();
+        workspaceEdit.set(textDocument.uri, edits);
+
+        // 应用编辑
+        const success = await vscode.workspace.applyEdit(workspaceEdit);
+
+        if (success) {
+          console.log(`Applied ${edits.length} Tailwind style changes to document on attempt ${attempt + 1}:`, textDocument.fileName);
+          return;
+        }
+        console.warn(`Tailwind style changes not applied on attempt ${attempt + 1}, will retry:`, textDocument.fileName);
+      } catch (error) {
+        lastError = error;
+        if (!this.isDocumentChangedError(error)) {
+          throw error;
+        }
+        console.warn(`Document changed error on Tailwind edit attempt ${attempt + 1}, retrying...`);
+      }
+
+      if (textDocument.version === versionBefore) {
+        console.warn('Document version unchanged for Tailwind edit, stopping retry to avoid infinite loop');
+        break;
+      }
+
+      // 增加指数退避延迟
+      const backoffDelay = Math.min(150 * Math.pow(2, attempt), 1500);
+      await new Promise(resolve => setTimeout(resolve, backoffDelay));
+    }
+
+    console.error(`Failed to apply Tailwind style changes after ${maxAttempts} attempts. Last error:`, lastError);
+  }
+
+  /**
    * 将驼峰命名转换为短横线命名
    */
   private camelToKebab(str: string): string {
@@ -1033,19 +1087,8 @@ export class VisualEditorProvider implements vscode.CustomTextEditorProvider {
       }
 
       if (edits.length > 0) {
-        // 创建工作区编辑
-        const workspaceEdit = new vscode.WorkspaceEdit();
-        workspaceEdit.set(textDocument.uri, edits);
-
-        // 应用编辑
-        const success = await vscode.workspace.applyEdit(workspaceEdit);
-
-        if (success) {
-          console.log(`Applied ${edits.length} Tailwind style changes to document:`, textDocument.fileName);
-        } else {
-          // This can happen due to concurrent edits and is usually resolved by retry
-          console.warn('Tailwind style changes were not applied (may retry):', textDocument.fileName);
-        }
+        // 使用重试机制应用Tailwind样式编辑
+        await this.applyTailwindEditsWithRetry(textDocument, edits);
       }
     } catch (error) {
       console.error('Error handling Tailwind style change:', error);

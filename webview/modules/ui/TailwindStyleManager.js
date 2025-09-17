@@ -11,6 +11,39 @@ window.WVE.TailwindStyleManager = class TailwindStyleManager {
 
     // 初始化完成标记
     this.initialized = true;
+
+    // 防抖机制
+    this.pendingOperations = new Map(); // 存储待处理的操作
+    this.debounceTimeout = null;
+    this.debounceDelay = 400; // 优化为400ms，在响应性和稳定性间平衡
+    this.isProcessing = false; // 处理状态标记
+    this.lastProcessTime = 0; // 最后处理时间，用于额外的防抖保护
+
+    // 全局操作锁 - 防止重复修改
+    if (!window.WVE.GlobalOperationLock) {
+      window.WVE.GlobalOperationLock = {
+        locked: false,
+        queue: [],
+        lock() {
+          this.locked = true;
+        },
+        unlock() {
+          this.locked = false;
+          // 处理队列中的下一个操作
+          if (this.queue.length > 0) {
+            const nextOperation = this.queue.shift();
+            setTimeout(nextOperation, 50);
+          }
+        },
+        isLocked() {
+          return this.locked;
+        },
+        enqueue(operation) {
+          this.queue.push(operation);
+        }
+      };
+    }
+    this.globalLock = window.WVE.GlobalOperationLock;
   }
 
   /**
@@ -37,7 +70,14 @@ window.WVE.TailwindStyleManager = class TailwindStyleManager {
         marginTop: computedStyle.marginTop,
         marginRight: computedStyle.marginRight,
         marginBottom: computedStyle.marginBottom,
-        marginLeft: computedStyle.marginLeft
+        marginLeft: computedStyle.marginLeft,
+        // 布局相关属性
+        display: computedStyle.display,
+        position: computedStyle.position,
+        flexDirection: computedStyle.flexDirection,
+        justifyContent: computedStyle.justifyContent,
+        alignItems: computedStyle.alignItems,
+        gap: computedStyle.gap
       },
       hasInlineStyle: element.style.length > 0
     };
@@ -173,6 +213,30 @@ window.WVE.TailwindStyleManager = class TailwindStyleManager {
       else if (cls.match(/^text-(left|center|right|justify|start|end)$/)) {
         newClassTypes.add('text-align');
       }
+      // 检查显示类型（布局相关）
+      else if (cls.match(/^(block|inline|inline-block|flex|inline-flex|table|inline-table|table-caption|table-cell|table-column|table-column-group|table-footer-group|table-header-group|table-row-group|table-row|flow-root|grid|inline-grid|contents|list-item|hidden)$/)) {
+        newClassTypes.add('display');
+      }
+      // 检查定位
+      else if (cls.match(/^(static|fixed|absolute|relative|sticky)$/)) {
+        newClassTypes.add('position');
+      }
+      // 检查 Flex 方向
+      else if (cls.match(/^flex-(row|row-reverse|col|col-reverse)$/)) {
+        newClassTypes.add('flex-direction');
+      }
+      // 检查 Flex 主轴对齐
+      else if (cls.match(/^justify-(start|end|center|between|around|evenly|stretch)$/)) {
+        newClassTypes.add('justify-content');
+      }
+      // 检查 Flex 交叉轴对齐
+      else if (cls.match(/^items-(start|end|center|baseline|stretch)$/)) {
+        newClassTypes.add('align-items');
+      }
+      // 检查间距
+      else if (cls.match(/^gap-/)) {
+        newClassTypes.add('gap');
+      }
       // 其他类型可以继续添加...
     });
 
@@ -192,6 +256,30 @@ window.WVE.TailwindStyleManager = class TailwindStyleManager {
       }
       // 检查是否与新的文本对齐冲突
       if (newClassTypes.has('text-align') && cls.match(/^text-(left|center|right|justify|start|end)$/)) {
+        return false;
+      }
+      // 检查是否与新的显示类型冲突
+      if (newClassTypes.has('display') && cls.match(/^(block|inline|inline-block|flex|inline-flex|table|inline-table|table-caption|table-cell|table-column|table-column-group|table-footer-group|table-header-group|table-row-group|table-row|flow-root|grid|inline-grid|contents|list-item|hidden)$/)) {
+        return false;
+      }
+      // 检查是否与新的定位冲突
+      if (newClassTypes.has('position') && cls.match(/^(static|fixed|absolute|relative|sticky)$/)) {
+        return false;
+      }
+      // 检查是否与新的 Flex 方向冲突
+      if (newClassTypes.has('flex-direction') && cls.match(/^flex-(row|row-reverse|col|col-reverse)$/)) {
+        return false;
+      }
+      // 检查是否与新的主轴对齐冲突
+      if (newClassTypes.has('justify-content') && cls.match(/^justify-(start|end|center|between|around|evenly|stretch)$/)) {
+        return false;
+      }
+      // 检查是否与新的交叉轴对齐冲突
+      if (newClassTypes.has('align-items') && cls.match(/^items-(start|end|center|baseline|stretch)$/)) {
+        return false;
+      }
+      // 检查是否与新的间距冲突
+      if (newClassTypes.has('gap') && cls.match(/^gap-/)) {
         return false;
       }
       return true;
@@ -225,13 +313,194 @@ window.WVE.TailwindStyleManager = class TailwindStyleManager {
    * 保存样式变更（通过扩展端处理转换）
    * @param {HTMLElement} element - 目标元素
    * @param {Object} cssStyles - CSS样式对象
+   * @param {boolean} immediate - 是否立即处理，跳过防抖
    * @returns {Promise<string>} 转换后的Tailwind类名
    */
-  async saveStyleChanges(element, cssStyles) {
+  async saveStyleChanges(element, cssStyles, immediate = false) {
     if (!element || !cssStyles) {
       throw new Error('Invalid parameters');
     }
 
+    // 检查全局操作锁
+    if (this.globalLock.isLocked()) {
+      this.logger.warn('Global operation lock is active, queueing style change');
+      return new Promise((resolve) => {
+        this.globalLock.enqueue(() => {
+          if (immediate) {
+            this.executeSaveStyleChanges(element, cssStyles).then(resolve);
+          } else {
+            this.debouncedSaveStyleChanges(element, cssStyles, resolve);
+          }
+        });
+      });
+    }
+
+    // 立即处理单个布局变更，避免感知延迟
+    if (immediate || this.isSingleLayoutChange(cssStyles)) {
+      this.logger.info('Processing immediate style change:', cssStyles);
+      return this.executeImmediateStyleChange(element, cssStyles);
+    }
+
+    // 使用防抖机制来避免频繁的文件编辑操作
+    return new Promise((resolve) => {
+      this.debouncedSaveStyleChanges(element, cssStyles, resolve);
+    });
+  }
+
+  /**
+   * 判断是否为单个布局变更（应该立即处理）
+   * @param {Object} cssStyles - CSS样式对象
+   * @returns {boolean} 是否为单个布局变更
+   */
+  isSingleLayoutChange(cssStyles) {
+    const keys = Object.keys(cssStyles);
+    return keys.length === 1 && ['display', 'flexDirection', 'justifyContent', 'alignItems'].includes(keys[0]);
+  }
+
+  /**
+   * 防抖版本的样式保存
+   * @param {HTMLElement} element - 目标元素
+   * @param {Object} cssStyles - CSS样式对象
+   * @param {Function} resolve - Promise resolve 函数
+   */
+  debouncedSaveStyleChanges(element, cssStyles, resolve) {
+    // 检查是否正在处理或刚刚处理过
+    const now = Date.now();
+    if (this.isProcessing || (now - this.lastProcessTime < 200)) { // 降低到200ms的最小间隔
+      this.logger.warn('Style operation blocked: already processing or too frequent');
+      // 延迟重试
+      setTimeout(() => {
+        this.debouncedSaveStyleChanges(element, cssStyles, resolve);
+      }, 100); // 减少重试延迟
+      return;
+    }
+
+    // 为每个元素创建唯一标识
+    const elementId = this.getElementId(element);
+
+    // 存储或合并待处理的操作
+    if (this.pendingOperations.has(elementId)) {
+      // 合并样式变更
+      const existing = this.pendingOperations.get(elementId);
+      Object.assign(existing.cssStyles, cssStyles);
+      existing.resolvers.push(resolve);
+    } else {
+      this.pendingOperations.set(elementId, {
+        element,
+        cssStyles: { ...cssStyles },
+        resolvers: [resolve]
+      });
+    }
+
+    // 清除之前的定时器
+    if (this.debounceTimeout) {
+      clearTimeout(this.debounceTimeout);
+    }
+
+    // 设置新的防抖定时器
+    this.debounceTimeout = setTimeout(() => {
+      this.processPendingOperations();
+    }, this.debounceDelay);
+  }
+
+  /**
+   * 获取元素的唯一标识
+   * @param {HTMLElement} element - 目标元素
+   * @returns {string} 元素唯一标识
+   */
+  getElementId(element) {
+    // 使用DOM路径作为元素标识
+    let path = '';
+    let current = element;
+    while (current && current !== document.body) {
+      let index = 0;
+      let sibling = current.previousElementSibling;
+      while (sibling) {
+        if (sibling.tagName === current.tagName) {
+          index++;
+        }
+        sibling = sibling.previousElementSibling;
+      }
+      path = `${current.tagName.toLowerCase()}:nth-of-type(${index + 1})` + (path ? `>${path}` : '');
+      current = current.parentElement;
+    }
+    return path;
+  }
+
+  /**
+   * 处理所有待处理的操作
+   */
+  async processPendingOperations() {
+    // 防止重复处理
+    if (this.isProcessing) {
+      this.logger.warn('Style operations already being processed, skipping');
+      return;
+    }
+
+    // 获取全局锁
+    this.globalLock.lock();
+    this.isProcessing = true;
+    this.lastProcessTime = Date.now(); // 记录开始处理的时间
+
+    try {
+      const operations = Array.from(this.pendingOperations.values());
+      this.pendingOperations.clear();
+      this.debounceTimeout = null;
+
+      this.logger.info('Processing', operations.length, 'pending style operations with global lock');
+
+      // 串行处理操作以避免并发编辑冲突
+      for (const operation of operations) {
+        try {
+          const result = await this.executeSaveStyleChanges(operation.element, operation.cssStyles);
+          // 解析所有等待的 Promise
+          operation.resolvers.forEach(resolve => resolve(result));
+
+          // 在操作之间添加小延迟，进一步减少冲突
+          if (operations.length > 1) {
+            await new Promise(resolve => setTimeout(resolve, 50));
+          }
+        } catch (error) {
+          this.logger.error('Failed to process style operation:', error);
+          // 即使失败也要解析 Promise
+          operation.resolvers.forEach(resolve => resolve(''));
+        }
+      }
+    } finally {
+      this.isProcessing = false;
+      this.lastProcessTime = Date.now(); // 记录完成处理的时间
+      // 释放全局锁
+      setTimeout(() => {
+        this.globalLock.unlock();
+      }, 50); // 减少锁释放延迟，提高响应性
+    }
+  }
+
+  /**
+   * 立即处理样式变更（跳过防抖和队列）
+   * @param {HTMLElement} element - 目标元素
+   * @param {Object} cssStyles - CSS样式对象
+   * @returns {Promise<string>} 转换后的Tailwind类名
+   */
+  async executeImmediateStyleChange(element, cssStyles) {
+    // 获取临时锁，确保不与其他操作冲突
+    this.globalLock.lock();
+
+    try {
+      return await this.executeSaveStyleChanges(element, cssStyles);
+    } finally {
+      // 立即释放锁
+      this.globalLock.unlock();
+    }
+  }
+
+  /**
+   * 实际执行样式保存的方法
+   * @param {HTMLElement} element - 目标元素
+   * @param {Object} cssStyles - CSS样式对象
+   * @returns {Promise<string>} 转换后的Tailwind类名
+   */
+  async executeSaveStyleChanges(element, cssStyles) {
     this.logger.info('Converting CSS to Tailwind via extension:', cssStyles);
 
     try {
