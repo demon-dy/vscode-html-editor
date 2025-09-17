@@ -244,6 +244,14 @@ window.WVE.UIManager = class UIManager {
    */
   triggerTailwindScan() {
     try {
+      // 检查Tailwind是否可用
+      if (typeof window.tailwind === 'undefined') {
+        this.logger.warn('Tailwind CDN not yet loaded, deferring scan');
+        // 延迟重试
+        setTimeout(() => this.triggerTailwindScan(), 100);
+        return;
+      }
+
       // 在主文档中添加一些 Tailwind 类，确保 CDN 生成这些样式
       this.addTailwindTriggerClasses();
 

@@ -133,6 +133,15 @@ export class VisualEditorProvider implements vscode.CustomTextEditorProvider {
         case 'refresh':
           this.updateWebview(panel.webview, code);
           break;
+        case 'styleChange':
+          await this.handleStyleChange(code, event.data);
+          break;
+        case 'tailwindStyleChange':
+          await this.handleTailwindStyleChange(code, event.data);
+          break;
+        case 'cssToTailwindRequest':
+          await this.handleCSSToTailwindRequest(panel, event);
+          break;
         case 'select':
           this.selectElements(code, event);
           break;
@@ -234,10 +243,26 @@ export class VisualEditorProvider implements vscode.CustomTextEditorProvider {
 
   private applyOperationsToFragment(fragment: Element, operations: any[]) {
     for (const operation of operations) {
-      if (operation.style === null) {
-        fragment.removeAttribute('style');
-      } else {
-        fragment.setAttribute('style', operation.style);
+      if (operation.type === 'tailwindStyle') {
+        // 处理 Tailwind 类名操作
+        if (operation.tailwindClasses) {
+          fragment.setAttribute('class', operation.tailwindClasses);
+        } else {
+          fragment.removeAttribute('class');
+        }
+        // 同时处理内联样式（如果有的话）
+        if (operation.style === null) {
+          fragment.removeAttribute('style');
+        } else if (operation.style) {
+          fragment.setAttribute('style', operation.style);
+        }
+      } else if (operation.type === 'style' || !operation.type) {
+        // 处理传统的内联样式操作（向后兼容）
+        if (operation.style === null) {
+          fragment.removeAttribute('style');
+        } else {
+          fragment.setAttribute('style', operation.style);
+        }
       }
     }
   }
@@ -269,6 +294,8 @@ export class VisualEditorProvider implements vscode.CustomTextEditorProvider {
         if (!this.isDocumentChangedError(error)) {
           throw error;
         }
+        // Document changed error is expected in concurrent editing scenarios
+        // The retry mechanism will handle this automatically
       }
 
       if (code.version === versionBefore) {
@@ -299,7 +326,9 @@ export class VisualEditorProvider implements vscode.CustomTextEditorProvider {
         let best: { el: Element, dist: number } | null = null;
         for (const el of elements) {
           const loc = dom.nodeLocation(el);
-          if (!loc) continue;
+          if (!loc) {
+            continue;
+          }
           const covers = loc.startOffset <= start && end <= loc.endOffset;
           const name = this.shortName(el);
           if (covers && name === codeEdit.element) {
@@ -311,9 +340,13 @@ export class VisualEditorProvider implements vscode.CustomTextEditorProvider {
         }
         target = best?.el ?? null;
       }
-      if (!target) return null;
+      if (!target) {
+        return null;
+      }
       const location = dom.nodeLocation(target);
-      if (!location) return null;
+      if (!location) {
+        return null;
+      }
       return new vscode.Range(
         code.positionAt(location.startOffset),
         code.positionAt(location.endOffset)
@@ -508,86 +541,25 @@ export class VisualEditorProvider implements vscode.CustomTextEditorProvider {
       { path: 'webview.js', description: '入口文件', required: true }
     ];
 
-    // 配置 Tailwind CDN - 必须在 Tailwind 脚本加载前设置
+    // 配置 Tailwind CDN - 简化配置避免HTML序列化问题
     try {
       const configScript = document.createElement('script');
-      configScript.textContent = `
-        // 确保 tailwind 对象存在
-        window.tailwind = window.tailwind || {};
-
-        // 配置 Tailwind - 包含更完整的 safelist 和配置
-        window.tailwind.config = {
-          // 确保常用类总是可用
-          safelist: [
-            // 布局
-            'flex','flex-col','grid','items-center','justify-center','justify-between',
-            'gap-1','gap-2','gap-4','gap-8','space-x-1','space-x-2','space-y-1','space-y-2',
-
-            // 定位和尺寸
-            'fixed','absolute','relative','top-0','right-0','bottom-0','left-0',
-            'z-10','z-20','z-50','z-auto',
-            'w-3','w-4','w-5','w-8','w-12','w-14','w-16','w-full','w-auto',
-            'h-3','h-4','h-5','h-8','h-12','h-14','h-16','h-full','h-auto',
-            'min-w-0','max-w-none',
-
-            // 边距和内距
-            'p-0','p-1','p-2','p-3','p-4','px-1','px-2','px-3','px-4','py-1','py-2','py-3','py-4',
-            'm-0','m-1','m-2','m-3','m-4','mx-1','mx-2','mx-3','mx-4','my-1','my-2','my-3','my-4',
-
-            // 圆角和边框
-            'rounded','rounded-md','rounded-lg','rounded-full','rounded-none',
-            'border','border-0','border-2','border-gray-200','border-gray-300','border-blue-500',
-
-            // 背景和颜色
-            'bg-white','bg-gray-50','bg-gray-100','bg-gray-200','bg-gray-800','bg-gray-900',
-            'bg-blue-500','bg-blue-600','bg-red-500','bg-green-500',
-            'text-gray-400','text-gray-500','text-gray-600','text-gray-700','text-gray-800','text-gray-900',
-            'text-white','text-blue-500','text-red-500','text-green-500',
-
-            // 字体
-            'text-xs','text-sm','text-base','text-lg','font-normal','font-medium','font-semibold','font-bold',
-
-            // 交互
-            'cursor-pointer','cursor-grab','cursor-grabbing','cursor-move','cursor-default',
-            'select-none','pointer-events-none','pointer-events-auto',
-
-            // 阴影和效果
-            'shadow','shadow-sm','shadow-md','shadow-lg','shadow-xl',
-            'backdrop-blur-sm','backdrop-blur',
-
-            // 过渡和动画
-            'transition','transition-all','transition-colors','transition-transform',
-            'duration-150','duration-200','duration-300',
-            'ease-in-out','ease-out',
-
-            // 悬停和焦点状态
-            'hover:bg-gray-50','hover:bg-gray-100','hover:bg-gray-200',
-            'hover:text-gray-600','hover:text-gray-700','hover:text-gray-800',
-            'hover:shadow-md','hover:scale-105',
-            'focus:outline-none','focus:ring-1','focus:ring-2','focus:ring-blue-500',
-            'focus:border-blue-500'
-          ],
-
-          // 启用所有变体
-          variants: {
-            extend: {
-              backgroundColor: ['active'],
-              textColor: ['active'],
-              borderColor: ['active']
-            }
-          },
-
-          // 扫描所有可能的位置
-          content: [
-            { raw: '', extension: 'html' }
-          ]
-        };
-
-        // 设置 Tailwind 在 Shadow DOM 中工作的配置
-        if (window.tailwind) {
-          window.tailwind.scanShadowRoots = true;
-        }
-      `;
+      configScript.textContent = [
+        '// Tailwind configuration',
+        'window.tailwind = window.tailwind || {};',
+        'window.tailwind.config = {',
+        '  safelist: [',
+        '    "flex", "flex-col", "grid", "items-center", "justify-center",',
+        '    "fixed", "absolute", "relative", "z-10", "z-20", "z-50",',
+        '    "w-full", "h-full", "p-1", "p-2", "p-4", "m-1", "m-2", "m-4",',
+        '    "rounded", "border", "bg-white", "bg-gray-100", "bg-blue-500",',
+        '    "text-white", "text-gray-600", "text-sm", "font-medium",',
+        '    "cursor-pointer", "select-none", "shadow", "transition"',
+        '  ],',
+        '  content: [{ raw: "", extension: "html" }]',
+        '};',
+        'if (window.tailwind) window.tailwind.scanShadowRoots = true;'
+      ].join('\n');
       document.head.appendChild(configScript);
     } catch { /* ignore */ }
 
@@ -639,7 +611,9 @@ export class VisualEditorProvider implements vscode.CustomTextEditorProvider {
           { path: 'modules/ui/panel/StyleTab.js', description: '样式标签页' },
           { path: 'modules/ui/panel/LayoutTab.js', description: '布局标签页' },
           { path: 'modules/ui/panel/AttributeTab.js', description: '属性标签页' },
-          { path: 'modules/ui/ElementPanel.js', description: 'Figma风格元素面板' },
+          { path: 'modules/ui/TailwindStyleManager.js', description: 'Tailwind样式管理器（含转换库集成）' },
+          { path: 'modules/ui/StyleEditorPanel.js', description: '复杂样式编辑面板（依赖TailwindStyleManager）' },
+          { path: 'modules/ui/ElementPanel.js', description: 'Figma风格元素面板（依赖前两者）' },
           { path: 'modules/ui/PanelManager.js', description: '面板管理器' }
         ]
       },
@@ -712,4 +686,421 @@ export class VisualEditorProvider implements vscode.CustomTextEditorProvider {
       + Array.from(el.classList).map(c => `.${c}`).join('')
     );
   }
+
+  /**
+   * 根据选择器查找元素
+   */
+  private findElementBySelector(document: any, elementInfo: any): Element | null {
+    try {
+      // 如果有多种选择器策略，按优先级尝试
+      if (elementInfo.strategies && Array.isArray(elementInfo.strategies)) {
+        for (const strategy of elementInfo.strategies) {
+          try {
+            const element = document.querySelector(strategy.selector);
+            if (element) {
+              console.log(`Found element using ${strategy.type} selector:`, strategy.selector);
+              return element;
+            }
+          } catch (selectorError) {
+            console.warn(`Invalid selector (${strategy.type}):`, strategy.selector, String(selectorError));
+          }
+        }
+      }
+
+      // 回退到传统方法
+      // 首先尝试使用data-wve-id
+      if (elementInfo.wveId) {
+        const element = document.querySelector(`[data-wve-id="${elementInfo.wveId}"]`);
+        if (element) {
+          return element;
+        }
+      }
+
+      // 然后尝试使用ID
+      if (elementInfo.id) {
+        const element = document.getElementById(elementInfo.id);
+        if (element) {
+          return element;
+        }
+      }
+
+      // 最后尝试使用标签名
+      if (elementInfo.tagName) {
+        // 简单的标签名选择器，不包含复杂的类名
+        const elements = document.querySelectorAll(elementInfo.tagName);
+
+        // 如果只有一个匹配元素，直接返回
+        if (elements.length === 1) {
+          return elements[0];
+        }
+
+        // 尝试通过类名进一步过滤（但要排除有问题的Tailwind类）
+        if (elementInfo.className && elements.length > 1) {
+          const simpleClasses = elementInfo.className.trim().split(/\s+/)
+            .filter((cls: string) =>
+              !cls.startsWith('wve-') && // 排除扩展添加的类
+              !cls.includes(':') &&     // 排除包含冒号的Tailwind类
+              cls.length < 20           // 排除过长的类名
+            );
+
+          if (simpleClasses.length > 0) {
+            const selector = `${elementInfo.tagName}.${simpleClasses[0]}`;
+            try {
+              const element = document.querySelector(selector);
+              if (element) {
+                return element;
+              }
+            } catch (error) {
+              console.warn('Simple class selector failed:', selector);
+            }
+          }
+        }
+      }
+
+      return null;
+    } catch (error) {
+      console.error('Error finding element by selector:', error);
+      return null;
+    }
+  }
+
+  /**
+   * 创建样式编辑
+   */
+  private createStyleEdit(textDocument: vscode.TextDocument, _element: Element, property: string, value: string, location: any): vscode.TextEdit | null {
+    try {
+      // 获取元素的开始标签位置
+      const startOffset = location.startOffset;
+      const startTagEndOffset = location.startTag?.endOffset || location.endOffset;
+
+      // 获取开始标签的HTML内容
+      const startTagHtml = textDocument.getText(new vscode.Range(
+        textDocument.positionAt(startOffset),
+        textDocument.positionAt(startTagEndOffset)
+      ));
+
+      // 检查元素是否已有style属性
+      const styleRegex = /\s+style\s*=\s*["']([^"']*?)["']/i;
+      const styleMatch = startTagHtml.match(styleRegex);
+
+      let newStartTagHtml: string;
+
+      if (styleMatch) {
+        // 更新现有的style属性
+        const existingStyles = styleMatch[1];
+        const newStyles = this.updateStyleProperty(existingStyles, property, value);
+        newStartTagHtml = startTagHtml.replace(styleRegex, ` style="${newStyles}"`);
+      } else {
+        // 添加新的style属性
+        const tagMatch = startTagHtml.match(/^(<[^>]+?)(\s*\/?>)$/);
+        if (tagMatch) {
+          const newStyles = this.updateStyleProperty('', property, value);
+          newStartTagHtml = `${tagMatch[1]} style="${newStyles}"${tagMatch[2]}`;
+        } else {
+          console.warn('Could not parse start tag:', startTagHtml);
+          return null;
+        }
+      }
+
+      return vscode.TextEdit.replace(
+        new vscode.Range(
+          textDocument.positionAt(startOffset),
+          textDocument.positionAt(startTagEndOffset)
+        ),
+        newStartTagHtml
+      );
+    } catch (error) {
+      console.error('Error creating style edit:', error);
+      return null;
+    }
+  }
+
+  /**
+   * 将JavaScript CSS属性名转换为CSS属性名
+   */
+  private convertPropertyName(jsPropertyName: string): string {
+    const propertyMap: { [key: string]: string } = {
+      'backgroundColor': 'background-color',
+      'backgroundImage': 'background-image',
+      'borderRadius': 'border-radius',
+      'fontSize': 'font-size',
+      'fontWeight': 'font-weight',
+      'fontColor': 'color', // 特殊映射
+      'textAlign': 'text-align'
+    };
+
+    return propertyMap[jsPropertyName] || jsPropertyName.replace(/([a-z])([A-Z])/g, '$1-$2').toLowerCase();
+  }
+
+  /**
+   * 更新样式属性
+   */
+  private updateStyleProperty(existingStyles: string, property: string, value: string): string {
+    const styles = existingStyles.split(';').filter(s => s.trim());
+    const styleMap = new Map<string, string>();
+
+    // 解析现有样式
+    styles.forEach(style => {
+      const [prop, val] = style.split(':').map(s => s.trim());
+      if (prop && val) {
+        styleMap.set(prop, val);
+      }
+    });
+
+    // 转换属性名为CSS格式
+    const cssPropertyName = this.convertPropertyName(property);
+
+    // 更新或添加新属性
+    styleMap.set(cssPropertyName, value);
+
+    // 重新构建样式字符串
+    return Array.from(styleMap.entries())
+      .map(([prop, val]) => `${prop}: ${val}`)
+      .join('; ');
+  }
+
+  /**
+   * 处理样式变更事件
+   */
+  private async handleStyleChange(code: vscode.TextDocument, data: any): Promise<void> {
+    try {
+      // 使用传入的文档，确保我们操作的是正确的文档
+      const textDocument = code;
+
+      if (!data.changes || !Array.isArray(data.changes)) {
+        console.warn('Invalid style change data format');
+        return;
+      }
+
+      // 解析原始HTML文档
+      const dom = new JSDOM(textDocument.getText(), { includeNodeLocations: true });
+      const document = dom.window.document;
+
+      const edits: vscode.TextEdit[] = [];
+
+      // 处理每个样式变更
+      for (const change of data.changes) {
+        const { element: elementInfo, property, value } = change;
+
+        // 根据选择器查找元素
+        const targetElement = this.findElementBySelector(document, elementInfo);
+
+        if (targetElement) {
+          // 更新元素的样式
+          const location = dom.nodeLocation(targetElement);
+          if (location) {
+            const edit = this.createStyleEdit(textDocument, targetElement, property, value, location);
+            if (edit) {
+              edits.push(edit);
+            }
+          }
+        } else {
+          console.warn('Could not find element for selector:', elementInfo);
+        }
+      }
+
+      if (edits.length > 0) {
+        // 创建工作区编辑
+        const workspaceEdit = new vscode.WorkspaceEdit();
+        workspaceEdit.set(textDocument.uri, edits);
+
+        // 应用编辑
+        const success = await vscode.workspace.applyEdit(workspaceEdit);
+
+        if (success) {
+          console.log(`Applied ${edits.length} style changes to document:`, textDocument.fileName);
+        } else {
+          console.error('Failed to apply style changes to document:', textDocument.fileName);
+        }
+      }
+    } catch (error) {
+      console.error('Error handling style change:', error);
+    }
+  }
+
+  /**
+   * 处理CSS到Tailwind转换请求
+   */
+  private async handleCSSToTailwindRequest(panel: vscode.WebviewPanel, event: any): Promise<void> {
+    try {
+      console.log('Received cssToTailwindRequest event:', event);
+
+      const data = event.data || event;
+      const { requestId, cssStyles } = data;
+
+      if (!requestId || !cssStyles) {
+        console.warn('Invalid CSS to Tailwind request data:', data);
+        return;
+      }
+
+      // 动态导入css-to-tailwind-translator库
+      const { CssToTailwindTranslator } = require('css-to-tailwind-translator');
+
+      // 将CSS样式对象转换为完整的CSS规则
+      const cssProperties = Object.entries(cssStyles)
+        .map(([property, value]) => `${this.camelToKebab(property)}: ${value};`)
+        .join(' ');
+      const cssRule = `.temp { ${cssProperties} }`;
+
+      console.log('Converting CSS rule:', cssRule);
+
+      // 调用转换库
+      const result = CssToTailwindTranslator(cssRule);
+      console.log('Conversion result:', result);
+
+      let tailwindClasses = '';
+      if (result.code === 'OK' && result.data && result.data.length > 0) {
+        tailwindClasses = result.data[0].resultVal;
+      }
+
+      // 发送回应消息
+      panel.webview.postMessage({
+        type: 'cssToTailwindResponse',
+        requestId: requestId,
+        tailwindClasses: tailwindClasses
+      });
+
+      console.log('CSS to Tailwind conversion successful:', cssRule, '=>', tailwindClasses);
+    } catch (error) {
+      console.error('CSS to Tailwind conversion failed:', error);
+
+      // 发送失败回应
+      const data = event.data || event;
+      panel.webview.postMessage({
+        type: 'cssToTailwindResponse',
+        requestId: data.requestId || '',
+        tailwindClasses: ''
+      });
+    }
+  }
+
+  /**
+   * 将驼峰命名转换为短横线命名
+   */
+  private camelToKebab(str: string): string {
+    return str.replace(/([a-z])([A-Z])/g, '$1-$2').toLowerCase();
+  }
+
+  /**
+   * 处理Tailwind样式变更事件
+   */
+  private async handleTailwindStyleChange(code: vscode.TextDocument, data: any): Promise<void> {
+    try {
+      const textDocument = code;
+
+      if (!data.changes || !Array.isArray(data.changes)) {
+        console.warn('Invalid tailwind style change data format');
+        return;
+      }
+
+      // 解析原始HTML文档
+      const dom = new JSDOM(textDocument.getText(), { includeNodeLocations: true });
+      const document = dom.window.document;
+
+      const edits: vscode.TextEdit[] = [];
+
+      // 处理每个Tailwind样式变更
+      for (const change of data.changes) {
+        const { element: elementInfo, tailwindClasses, cssStyles } = change;
+
+        // 根据选择器查找元素
+        const targetElement = this.findElementBySelector(document, elementInfo);
+
+        if (targetElement && tailwindClasses) {
+          // 使用Tailwind类名更新元素
+          const location = dom.nodeLocation(targetElement);
+          if (location) {
+            const edit = this.createTailwindClassEdit(textDocument, targetElement, tailwindClasses, location);
+            if (edit) {
+              edits.push(edit);
+            }
+          }
+        } else if (targetElement && cssStyles) {
+          // 降级处理：如果没有Tailwind类名，使用CSS样式
+          console.warn('No Tailwind classes available, falling back to CSS styles for:', elementInfo);
+          const location = dom.nodeLocation(targetElement);
+          if (location) {
+            Object.entries(cssStyles).forEach(([property, value]) => {
+              const edit = this.createStyleEdit(textDocument, targetElement, property, value as string, location);
+              if (edit) {
+                edits.push(edit);
+              }
+            });
+          }
+        } else {
+          console.warn('Could not find element for selector:', elementInfo);
+        }
+      }
+
+      if (edits.length > 0) {
+        // 创建工作区编辑
+        const workspaceEdit = new vscode.WorkspaceEdit();
+        workspaceEdit.set(textDocument.uri, edits);
+
+        // 应用编辑
+        const success = await vscode.workspace.applyEdit(workspaceEdit);
+
+        if (success) {
+          console.log(`Applied ${edits.length} Tailwind style changes to document:`, textDocument.fileName);
+        } else {
+          // This can happen due to concurrent edits and is usually resolved by retry
+          console.warn('Tailwind style changes were not applied (may retry):', textDocument.fileName);
+        }
+      }
+    } catch (error) {
+      console.error('Error handling Tailwind style change:', error);
+    }
+  }
+
+  /**
+   * 创建Tailwind类名编辑
+   */
+  private createTailwindClassEdit(textDocument: vscode.TextDocument, _element: Element, tailwindClasses: string, location: any): vscode.TextEdit | null {
+    try {
+      // 获取元素的开始标签位置
+      const startOffset = location.startOffset;
+      const startTagEndOffset = location.startTag?.endOffset || location.endOffset;
+
+      // 获取开始标签的HTML内容
+      const startTagHtml = textDocument.getText(new vscode.Range(
+        textDocument.positionAt(startOffset),
+        textDocument.positionAt(startTagEndOffset)
+      ));
+
+      // 检查元素是否已有class属性
+      const classRegex = /\s+class\s*=\s*["']([^"']*?)["']/i;
+      const classMatch = startTagHtml.match(classRegex);
+
+      let newStartTagHtml: string;
+
+      if (classMatch) {
+        // 更新现有的class属性
+        newStartTagHtml = startTagHtml.replace(classRegex, ` class="${tailwindClasses}"`);
+      } else {
+        // 添加新的class属性
+        const tagMatch = startTagHtml.match(/^(<[^>]+?)(\s*\/?>)$/);
+        if (tagMatch) {
+          newStartTagHtml = `${tagMatch[1]} class="${tailwindClasses}"${tagMatch[2]}`;
+        } else {
+          console.warn('Could not parse start tag:', startTagHtml);
+          return null;
+        }
+      }
+
+      // 清除可能存在的内联style属性（因为我们现在使用Tailwind类名）
+      newStartTagHtml = newStartTagHtml.replace(/\s+style\s*=\s*["'][^"']*["']/i, '');
+
+      return vscode.TextEdit.replace(
+        new vscode.Range(
+          textDocument.positionAt(startOffset),
+          textDocument.positionAt(startTagEndOffset)
+        ),
+        newStartTagHtml
+      );
+    } catch (error) {
+      console.error('Error creating Tailwind class edit:', error);
+      return null;
+    }
+  }
+
 }

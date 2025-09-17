@@ -3,11 +3,12 @@
  */
 window.WVE = window.WVE || {};
 window.WVE.ElementPanel = class ElementPanel {
-  constructor(uiManager, stateManager, eventManager) {
+  constructor(uiManager, stateManager, eventManager, tailwindManager = null) {
     this.logger = new window.WVE.Logger('ElementPanel');
     this.uiManager = uiManager;
     this.stateManager = stateManager;
     this.eventManager = eventManager;
+    this.injectedTailwindManager = tailwindManager;
 
     this.root = null;
     this.panel = null;
@@ -26,6 +27,9 @@ window.WVE.ElementPanel = class ElementPanel {
     this.isOverflowOpen = false;
     this.collapsed = false;
     this.collapseButton = null;
+    this.tailwindManager = null;
+    this.activeEditor = null;
+    this.styleEditorPanel = null;
 
     this.storageKey = `wve-style-toolbar:${window.wve?.codeId || 'default'}`;
 
@@ -44,6 +48,13 @@ window.WVE.ElementPanel = class ElementPanel {
 
     this.uiManager.initUIRoot();
     this.root = this.uiManager.getUIRoot();
+    this.tailwindManager = this.injectedTailwindManager || new window.WVE.TailwindStyleManager();
+
+    // 初始化样式编辑面板
+    if (window.WVE.StyleEditorPanel) {
+      this.styleEditorPanel = new window.WVE.StyleEditorPanel(this.uiManager, this.tailwindManager);
+      this.styleEditorPanel.init();
+    }
 
     this.restoreState();
     this.createToolbar();
@@ -57,6 +68,7 @@ window.WVE.ElementPanel = class ElementPanel {
     this.applyCollapsedState();
     this.updateVisibility();
     this.updateValues(null);
+    this.bindFieldEvents();
 
     window.WVE.LucideIcons.replaceInRoot(this.root);
 
@@ -64,6 +76,7 @@ window.WVE.ElementPanel = class ElementPanel {
 
     document.addEventListener('wveSelectionChange', this.handleSelectionChange);
     document.addEventListener('wveModeChange', this.handleModeChange);
+    document.addEventListener('wveStyleChange', this.handleStyleChange.bind(this));
     window.addEventListener('resize', this.handleResize);
     window.addEventListener('mousedown', this.handleOutsideClick, true);
 
@@ -300,6 +313,16 @@ window.WVE.ElementPanel = class ElementPanel {
         flex: 1;
         justify-content: center;
       }
+      .wve-inline-editor {
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 6px;
+        padding: 4px;
+      }
+      .wve-inline-editor input:focus,
+      .wve-inline-editor select:focus {
+        outline: 1px solid rgba(255, 255, 255, 0.4);
+        outline-offset: 1px;
+      }
     `;
 
     const toolbar = document.createElement('div');
@@ -324,25 +347,25 @@ window.WVE.ElementPanel = class ElementPanel {
         { type: 'button', id: 'orientationToggle', icon: 'more-horizontal', label: '切换操作栏布局', toggle: true }
       ]},
       { type: 'divider' },
-      { type: 'field', id: 'backgroundColor', icon: 'paintbrush', label: '背景色' },
-      { type: 'field', id: 'backgroundImage', icon: 'image', label: '背景图片' },
-      { type: 'field', id: 'border', icon: 'square-dashed', label: '描边' },
-      { type: 'field', id: 'borderRadius', icon: 'radius', label: '圆角' },
+      { type: 'field', id: 'backgroundColor', icon: 'paintbrush', label: '背景色', editable: 'panel', panelType: 'color' },
+      { type: 'field', id: 'backgroundImage', icon: 'image', label: '背景图片', editable: 'panel', panelType: 'image' },
+      { type: 'field', id: 'border', icon: 'square-dashed', label: '描边', editable: 'panel', panelType: 'border' },
+      { type: 'field', id: 'borderRadius', icon: 'radius', label: '圆角', editable: 'inline', inputType: 'number', suffix: 'px' },
       { type: 'divider' },
-      { type: 'field', id: 'display', icon: 'layout-dashboard', label: '布局' },
-      { type: 'field', id: 'padding', icon: 'shrink', label: '内边距' },
-      { type: 'field', id: 'margin', icon: 'expand', label: '外边距' },
+      { type: 'field', id: 'display', icon: 'layout-dashboard', label: '布局', editable: 'panel', panelType: 'display' },
+      { type: 'field', id: 'padding', icon: 'shrink', label: '内边距', editable: 'panel', panelType: 'box-model' },
+      { type: 'field', id: 'margin', icon: 'expand', label: '外边距', editable: 'panel', panelType: 'box-model' },
       { type: 'divider' },
-      { type: 'field', id: 'fontSize', icon: 'type', label: '字号' },
-      { type: 'field', id: 'fontWeight', icon: 'bold', label: '粗细' },
-      { type: 'field', id: 'fontColor', icon: 'underline', label: '字体颜色' },
+      { type: 'field', id: 'fontSize', icon: 'type', label: '字号', editable: 'inline', inputType: 'number', suffix: 'px' },
+      { type: 'field', id: 'fontWeight', icon: 'bold', label: '粗细', editable: 'inline', inputType: 'select', options: ['100', '200', '300', '400', '500', '600', '700', '800', '900'] },
+      { type: 'field', id: 'fontColor', icon: 'underline', label: '字体颜色', editable: 'panel', panelType: 'color' },
       { type: 'divider' },
-      { type: 'field', id: 'textAlign', icon: 'align-justify', label: '对齐方式' },
+      { type: 'field', id: 'textAlign', icon: 'align-justify', label: '对齐方式', editable: 'inline', inputType: 'button-group', options: [{ value: 'left', icon: 'align-left' }, { value: 'center', icon: 'align-center' }, { value: 'right', icon: 'align-right' }, { value: 'justify', icon: 'align-justify' }] },
       { type: 'divider' },
-      { type: 'field', id: 'opacity', icon: 'droplet', label: '不透明度' },
+      { type: 'field', id: 'opacity', icon: 'droplet', label: '不透明度', editable: 'inline', inputType: 'slider', min: 0, max: 100, suffix: '%' },
       { type: 'divider' },
-      { type: 'field', id: 'width', icon: 'move-horizontal', label: '宽度' },
-      { type: 'field', id: 'height', icon: 'move-vertical', label: '高度' }
+      { type: 'field', id: 'width', icon: 'move-horizontal', label: '宽度', editable: 'inline', inputType: 'number', suffix: 'px' },
+      { type: 'field', id: 'height', icon: 'move-vertical', label: '高度', editable: 'inline', inputType: 'number', suffix: 'px' }
     ];
 
     schema.forEach(item => {
@@ -636,6 +659,20 @@ window.WVE.ElementPanel = class ElementPanel {
     }
   }
 
+  handleStyleChange(event) {
+    const { element } = event.detail || {};
+
+    // 如果样式变更是针对当前选中的元素，延迟刷新显示
+    if (element === this.currentTarget) {
+      setTimeout(() => {
+        // 确保 StyleEditorPanel 的抑制刷新状态已清除
+        if (!this.styleEditorPanel || !this.styleEditorPanel.suppressRefresh) {
+          this.updateValues(this.currentTarget);
+        }
+      }, 100);
+    }
+  }
+
   handleResize() {
     if (this.dragging) return;
     this.applyStoredPosition();
@@ -720,6 +757,7 @@ window.WVE.ElementPanel = class ElementPanel {
   }
 
   handleOutsideClick(event) {
+    // 只处理overflow菜单的关闭，不触发其他更新
     if (!this.isOverflowOpen) return;
     const path = event.composedPath ? event.composedPath() : [];
     if (path.includes(this.panel)) return;
@@ -772,6 +810,11 @@ window.WVE.ElementPanel = class ElementPanel {
   }
 
   updateValues(target) {
+    // 如果 StyleEditorPanel 正在编辑并禁止刷新，则跳过更新
+    if (this.styleEditorPanel && this.styleEditorPanel.suppressRefresh) {
+      return;
+    }
+
     this.currentTarget = target;
     const values = this.collectValues(target);
 
@@ -1102,5 +1145,138 @@ window.WVE.ElementPanel = class ElementPanel {
     this.isOverflowOpen = false;
     this.overflowMenu.setAttribute('data-open', 'false');
     this.overflowButton?.setAttribute('aria-expanded', 'false');
+  }
+
+  /**
+   * 设置样式编辑面板引用
+   */
+  setStyleEditorPanel(panel) {
+    this.styleEditorPanel = panel;
+  }
+
+  /**
+   * 绑定字段点击事件
+   */
+  bindFieldEvents() {
+    if (!this.toolbar) return;
+
+    this.toolbar.addEventListener('click', (event) => {
+      const field = event.target.closest('.wve-toolbar-item[data-type="field"]');
+      if (!field) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      this.handleFieldClick(field);
+    });
+
+    // 添加悬停效果
+    this.toolbar.addEventListener('mouseover', (event) => {
+      const field = event.target.closest('.wve-toolbar-item[data-type="field"]');
+      if (!field) return;
+
+      const fieldId = field.dataset.field;
+      const meta = this.getFieldMeta(fieldId);
+      if (meta && meta.editable) {
+        field.style.cursor = 'pointer';
+      }
+    });
+  }
+
+  /**
+   * 处理字段点击
+   */
+  handleFieldClick(field) {
+    if (!this.currentTarget) {
+      this.logger.warn('No target element selected');
+      return;
+    }
+
+    const fieldId = field.dataset.field;
+    const meta = this.getFieldMeta(fieldId);
+
+    if (!meta || !meta.editable) {
+      return;
+    }
+
+    if (meta.editable === 'panel') {
+      this.openStylePanel(field, meta);
+    }
+  }
+
+  /**
+   * 获取字段元数据
+   */
+  getFieldMeta(fieldId) {
+    // 从buildItems的schema中查找
+    const schema = [
+      { type: 'field', id: 'backgroundColor', icon: 'paintbrush', label: '背景色', editable: 'panel', panelType: 'color' },
+      { type: 'field', id: 'fontColor', icon: 'underline', label: '字体颜色', editable: 'panel', panelType: 'color' },
+      { type: 'field', id: 'padding', icon: 'shrink', label: '内边距', editable: 'panel', panelType: 'box-model' },
+      { type: 'field', id: 'margin', icon: 'expand', label: '外边距', editable: 'panel', panelType: 'box-model' }
+    ];
+
+    return schema.find(item => item.id === fieldId);
+  }
+
+  /**
+   * 打开样式面板
+   */
+  openStylePanel(field, meta) {
+    if (!this.styleEditorPanel) {
+      this.logger.warn('StyleEditorPanel not initialized');
+      return;
+    }
+
+    this.styleEditorPanel.open(meta.panelType, meta.id, this.currentTarget, field);
+  }
+
+  /**
+   * 使用转换库获取元素样式信息（演示方法）
+   */
+  async getElementStyleInfo(element) {
+    if (!this.tailwindManager) {
+      this.logger.warn('TailwindStyleManager not initialized');
+      return null;
+    }
+
+    try {
+      const styleInfo = await this.tailwindManager.getElementStyleInfo(element);
+      this.logger.info('Element style info:', styleInfo);
+      return styleInfo;
+    } catch (error) {
+      this.logger.error('Failed to get element style info:', error);
+      return null;
+    }
+  }
+
+  /**
+   * 使用转换库保存样式变更（演示方法）
+   */
+  async saveElementStyleChanges(element, cssStyles) {
+    if (!this.tailwindManager) {
+      this.logger.warn('TailwindStyleManager not initialized');
+      return false;
+    }
+
+    try {
+      const tailwindClasses = await this.tailwindManager.saveStyleChanges(element, cssStyles);
+      this.logger.info('Style changes saved:', tailwindClasses);
+
+      // 触发样式变更事件，通知其他组件更新
+      const event = new CustomEvent('wveStyleChange', {
+        detail: {
+          element: element,
+          cssStyles: cssStyles,
+          tailwindClasses: tailwindClasses
+        }
+      });
+      document.dispatchEvent(event);
+
+      return true;
+    } catch (error) {
+      this.logger.error('Failed to save style changes:', error);
+      return false;
+    }
   }
 };
