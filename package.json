@@ -17,7 +17,7 @@
   "author": "demonduyu",
   "repository": {
     "type": "git",
-    "url": "https://github.com/your-username/vscode-html-editor.git"
+    "url": "https://github.com/demon-dy/vscode-html-editor"
   },
   "scripts": {
     "vs": "node scripts/release.js",
