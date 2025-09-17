@@ -126,7 +126,7 @@ window.WVE.ElementPanel = class ElementPanel {
         top: 16px;
         left: 50%;
         transform: translateX(-50%);
-        z-index: 2147483647;
+        z-index: 50000;
         background: rgba(18, 18, 18, 0.82);
         color: rgba(255, 255, 255, 0.88);
         border-radius: 16px;

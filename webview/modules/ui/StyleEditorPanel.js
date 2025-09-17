@@ -37,7 +37,7 @@ window.WVE.StyleEditorPanel = class StyleEditorPanel {
       box-shadow: 0 20px 40px rgba(0, 0, 0, 0.35);
       backdrop-filter: blur(16px);
       display: none;
-      z-index: 2147483648;
+      z-index: 100000;
       font-family: var(--vscode-font-family, "Inter", "SF Pro Text", system-ui, -apple-system, "Segoe UI", sans-serif);
       min-width: 200px;
       max-width: 280px;

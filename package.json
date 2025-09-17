@@ -56,23 +56,23 @@
   "contributes": {
     "commands": [
       {
-        "command": "web-visual-editor.open",
-        "title": "Visual Editor",
+        "command": "vscode-html-editor.open",
+        "title": "HTML Editor",
         "icon": {
           "light": "images/icon-light.png",
           "dark": "images/icon-dark.png"
         }
       },
       {
-        "command": "web-visual-editor.openBeside",
-        "title": "Visual Editor to the Side",
+        "command": "vscode-html-editor.openBeside",
+        "title": "HTML Editor to the Side",
         "icon": {
           "light": "images/icon-split-light.png",
           "dark": "images/icon-split-dark.png"
         }
       },
       {
-        "command": "web-visual-editor.showSource",
+        "command": "vscode-html-editor.showSource",
         "title": "Show Source",
         "icon": "$(go-to-file)"
       }
@@ -80,8 +80,8 @@
     "customEditors": [
       {
         "priority": "option",
-        "viewType": "web-visual-editor.customEditor",
-        "displayName": "Visual Editor",
+        "viewType": "vscode-html-editor.customEditor",
+        "displayName": "HTML Editor",
         "selector": [
           {
             "filenamePattern": "*.html"
@@ -113,25 +113,25 @@
     "menus": {
       "explorer/context": [
         {
-          "command": "web-visual-editor.open",
+          "command": "vscode-html-editor.open",
           "when": "resourceLangId == html",
           "group": "navigation@5"
         }
       ],
       "editor/title": [
         {
-          "command": "web-visual-editor.openBeside",
-          "when": "resourceLangId == 'html' && activeCustomEditorId != 'web-visual-editor.customEditor'",
+          "command": "vscode-html-editor.openBeside",
+          "when": "resourceLangId == 'html' && activeCustomEditorId != 'vscode-html-editor.customEditor'",
           "group": "navigation@1"
         },
         {
-          "command": "web-visual-editor.open",
-          "when": "resourceLangId == 'html' && activeCustomEditorId != 'web-visual-editor.customEditor'",
+          "command": "vscode-html-editor.open",
+          "when": "resourceLangId == 'html' && activeCustomEditorId != 'vscode-html-editor.customEditor'",
           "group": "navigation@2"
         },
         {
-          "command": "web-visual-editor.showSource",
-          "when": "activeCustomEditorId == 'web-visual-editor.customEditor'",
+          "command": "vscode-html-editor.showSource",
+          "when": "activeCustomEditorId == 'vscode-html-editor.customEditor'",
           "group": "navigation@3"
         }
       ]
