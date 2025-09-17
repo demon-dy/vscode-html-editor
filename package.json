@@ -1,6 +1,6 @@
 {
   "name": "vscode-html-editor",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "displayName": "html Editor",
   "description": "Edit HTML files visually.",
   "categories": [
@@ -13,10 +13,14 @@
   "engines": {
     "vscode": "^1.99.0"
   },
-  "publisher": "Demon",
-  "author": "Demon",
+  "publisher": "demonduyu",
+  "author": "demonduyu",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-username/vscode-html-editor.git"
+  },
   "scripts": {
-    "vscode:prepublish": "npm run package",
+    "vs": "node scripts/release.js",
     "compile": "npm run check-types && npm run lint && node esbuild.js",
     "watch": "npm-run-all -p watch:*",
     "watch:esbuild": "node esbuild.js --watch",
