@@ -47,12 +47,19 @@ window.WVE.EventManager = class EventManager {
    * 发送选择变更事件
    */
   emitSelectionChange(selectedElements) {
+    this.logger.info('EventManager: Emitting selection change', {
+      count: selectedElements.size,
+      elements: Array.from(selectedElements).map(el => window.WVE.DOMUtils.shortNameOf(el))
+    });
+
     // 内部广播（不受 linkCode 影响）
     try {
       const event = new CustomEvent('wveSelectionChange', {
         detail: { selected: Array.from(selectedElements) }
       });
+      this.logger.info('EventManager: Dispatching wveSelectionChange event', event.detail);
       document.dispatchEvent(event);
+      this.logger.info('EventManager: wveSelectionChange event dispatched successfully');
     } catch (e) {
       this.logger.error('Failed to dispatch internal selection event', e);
     }

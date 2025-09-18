@@ -45,7 +45,13 @@ window.WVE.SelectionManager = class SelectionManager {
     this.logger.info('Element selected:', window.WVE.DOMUtils.shortNameOf(element));
 
     if (emit) {
+      this.logger.info('SelectionManager: About to emit selection change', {
+        selectedCount: this.selected.size,
+        element: window.WVE.DOMUtils.shortNameOf(element)
+      });
       this.eventManager.emitSelectionChange(this.selected);
+    } else {
+      this.logger.debug('SelectionManager: Skipping event emission (emit=false)');
     }
   }
 
@@ -79,6 +85,9 @@ window.WVE.SelectionManager = class SelectionManager {
 
     this.logger.info('Element deselected:', window.WVE.DOMUtils.shortNameOf(element));
 
+    this.logger.info('SelectionManager: About to emit selection change after deselect', {
+      selectedCount: this.selected.size
+    });
     this.eventManager.emitSelectionChange(this.selected);
   }
 

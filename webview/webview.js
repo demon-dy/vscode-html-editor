@@ -2,6 +2,18 @@
  * WebView 主入口文件 - 模块化版本
  */
 
+// 全局配置
+window.WVE = window.WVE || {};
+window.WVE.config = {
+  // 日志级别: 0=debug, 1=info, 2=warn, 3=error
+  // 默认为 1 (info)，在开发时可以设置为 0 (debug)
+  logLevel: 1, // 生产环境默认不显示 debug 日志
+
+  // 其他配置...
+  enableMovingElements: false,
+  allowScript: false
+};
+
 // 获取 VSCode API
 const vscode = acquireVsCodeApi();
 

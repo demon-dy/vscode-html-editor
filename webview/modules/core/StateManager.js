@@ -107,7 +107,10 @@ window.WVE.StateManager = class StateManager {
    * 设置鼠标位置
    */
   setMousePosition(type, position) {
-    this.logger.debug(`Setting mouse ${type} position:`, position);
+    // 只记录开始位置，避免移动时的大量日志输出
+    if (type === 'start') {
+      this.logger.debug(`Setting mouse ${type} position:`, position);
+    }
     this.mouse[type] = { ...position };
   }
 

@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>选择事件调试测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f5f5f5;
+        }
+
+        .test-element {
+            padding: 20px;
+            margin: 10px 0;
+            background: white;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .test-element:hover {
+            border-color: #4CAF50;
+            transform: translateY(-2px);
+        }
+
+        [wve-selected] {
+            border-color: #2196F3 !important;
+            background-color: rgba(33, 150, 243, 0.1);
+        }
+
+        .debug-info {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            width: 300px;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+            font-size: 12px;
+            font-family: monospace;
+            max-height: 400px;
+            overflow-y: auto;
+            z-index: 1000;
+        }
+
+        .debug-info h3 {
+            margin: 0 0 10px 0;
+            font-size: 14px;
+        }
+
+        .log-entry {
+            margin: 5px 0;
+            padding: 3px;
+            background: #f8f8f8;
+            border-radius: 3px;
+        }
+
+        .log-error {
+            background: #ffe6e6;
+            color: #d63031;
+        }
+
+        .log-info {
+            background: #e6f3ff;
+            color: #0984e3;
+        }
+
+        .log-debug {
+            background: #f0f0f0;
+            color: #636e72;
+        }
+    </style>
+</head>
+<body data-wve-code-start="0" data-wve-code-end="100">
+    <h1>选择事件调试测试页面</h1>
+
+    <p>点击下面的元素来测试选择事件是否正常触发，并查看调试信息。</p>
+
+    <div class="debug-info">
+        <h3>调试日志</h3>
+        <div style="margin-bottom: 10px;">
+            <label for="logLevel">日志级别:</label>
+            <select id="logLevel" onchange="setLogLevel(this.value)">
+                <option value="0">Debug (显示所有)</option>
+                <option value="1" selected>Info (默认)</option>
+                <option value="2">Warn (只显示警告和错误)</option>
+                <option value="3">Error (只显示错误)</option>
+            </select>
+        </div>
+        <div id="debug-logs"></div>
+        <button onclick="clearLogs()">清除日志</button>
+    </div>
+
+    <div class="test-element" data-wve-code-start="10" data-wve-code-end="20">
+        <h2>测试元素 1</h2>
+        <p>这是第一个测试元素，点击选择它。</p>
+    </div>
+
+    <div class="test-element" data-wve-code-start="25" data-wve-code-end="35">
+        <h2>测试元素 2</h2>
+        <p>这是第二个测试元素，可以测试多选。</p>
+        <button data-wve-code-start="30" data-wve-code-end="32">内嵌按钮</button>
+    </div>
+
+    <div class="test-element" data-wve-code-start="40" data-wve-code-end="60">
+        <h2>测试元素 3</h2>
+        <p>这个元素包含更复杂的结构：</p>
+        <ul data-wve-code-start="45" data-wve-code-end="55">
+            <li data-wve-code-start="46" data-wve-code-end="48">列表项 1</li>
+            <li data-wve-code-start="49" data-wve-code-end="51">列表项 2</li>
+            <li data-wve-code-start="52" data-wve-code-end="54">列表项 3</li>
+        </ul>
+    </div>
+
+    <script>
+        let debugLogs = document.getElementById('debug-logs');
+        let logCount = 0;
+
+        // 捕获所有控制台日志
+        const originalConsoleLog = console.log;
+        const originalConsoleInfo = console.info;
+        const originalConsoleError = console.error;
+        const originalConsoleDebug = console.debug;
+
+        function addLogEntry(level, message) {
+            logCount++;
+            const entry = document.createElement('div');
+            entry.className = `log-entry log-${level}`;
+            entry.innerHTML = `<small>[${logCount}] ${new Date().toLocaleTimeString()}</small><br>${message}`;
+            debugLogs.appendChild(entry);
+            debugLogs.scrollTop = debugLogs.scrollHeight;
+
+            // 限制日志数量
+            if (debugLogs.children.length > 50) {
+                debugLogs.removeChild(debugLogs.firstChild);
+            }
+        }
+
+        console.log = function(...args) {
+            originalConsoleLog.apply(console, args);
+            addLogEntry('info', args.map(arg => typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)).join(' '));
+        };
+
+        console.info = function(...args) {
+            originalConsoleInfo.apply(console, args);
+            addLogEntry('info', args.map(arg => typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)).join(' '));
+        };
+
+        console.error = function(...args) {
+            originalConsoleError.apply(console, args);
+            addLogEntry('error', args.map(arg => typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)).join(' '));
+        };
+
+        console.debug = function(...args) {
+            originalConsoleDebug.apply(console, args);
+            addLogEntry('debug', args.map(arg => typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)).join(' '));
+        };
+
+        function clearLogs() {
+            debugLogs.innerHTML = '';
+            logCount = 0;
+            console.info('调试日志已清除');
+        }
+
+        function setLogLevel(level) {
+            // 设置全局日志级别
+            window.WVE = window.WVE || {};
+            window.WVE.config = window.WVE.config || {};
+            window.WVE.config.logLevel = parseInt(level);
+
+            console.info(`日志级别已设置为: ${level} (${['Debug', 'Info', 'Warn', 'Error'][level]})`);
+
+            // 如果 WVE 已经初始化，更新所有已存在的 Logger
+            if (window.WVE.Logger && window.WVE.Logger.updateAllLevels) {
+                window.WVE.Logger.updateAllLevels(parseInt(level));
+            }
+        }
+
+        // 监听选择变更事件
+        document.addEventListener('wveSelectionChange', function(event) {
+            console.info('📢 接收到选择变更事件:', {
+                detail: event.detail,
+                selectedCount: event.detail?.selected?.length || 0,
+                elements: event.detail?.selected?.map(el => el.tagName + '.' + (el.className || '(no-class)')) || []
+            });
+        });
+
+        // 页面加载完成后的提示
+        window.addEventListener('load', function() {
+            console.info('🚀 选择事件调试页面已加载');
+            console.info('💡 现在可以点击测试元素来查看选择事件是否正常触发');
+        });
+
+        // 监听所有自定义事件
+        document.addEventListener('wveModeChange', function(event) {
+            console.info('📢 接收到模式变更事件:', event.detail);
+        });
+
+        document.addEventListener('wveStyleChange', function(event) {
+            console.info('📢 接收到样式变更事件:', event.detail);
+        });
+
+        document.addEventListener('wveLayoutModeChange', function(event) {
+            console.info('📢 接收到布局模式变更事件:', event.detail);
+        });
+    </script>
+</body>
+</html>

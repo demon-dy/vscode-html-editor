@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>调试工具栏样式</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .debug-info {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            width: 400px;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+            font-size: 12px;
+            font-family: monospace;
+            max-height: 60vh;
+            overflow-y: auto;
+            z-index: 1000;
+        }
+
+        .test-element {
+            padding: 15px;
+            margin: 20px 0;
+            background: #f5f5f5;
+            border: 2px solid #ddd;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .test-element:hover {
+            border-color: #007acc;
+        }
+
+        [wve-selected] {
+            border-color: #007acc !important;
+            background-color: rgba(0, 122, 204, 0.1);
+        }
+
+        .debug-button {
+            margin: 5px;
+            padding: 8px 12px;
+            background: #007acc;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .debug-button:hover {
+            background: #005a9e;
+        }
+    </style>
+</head>
+<body data-wve-code-start="0" data-wve-code-end="1000">
+    <h1>工具栏样式调试页面</h1>
+
+    <div class="debug-info">
+        <h3>调试控制</h3>
+        <button class="debug-button" onclick="checkUIRoot()">检查 UI Root</button>
+        <button class="debug-button" onclick="checkToolbar()">检查工具栏</button>
+        <button class="debug-button" onclick="syncStyles()">同步样式</button>
+        <button class="debug-button" onclick="showShadowContent()">显示 Shadow DOM</button>
+        <div id="debug-output"></div>
+    </div>
+
+    <div class="test-element" data-wve-code-start="10" data-wve-code-end="20">
+        <h3>测试元素 1</h3>
+        <p>点击这个元素来测试属性面板功能</p>
+    </div>
+
+    <div class="test-element" data-wve-code-start="30" data-wve-code-end="40">
+        <h3>测试元素 2</h3>
+        <p>另一个测试元素</p>
+    </div>
+
+    <script>
+        let debugOutput = document.getElementById('debug-output');
+
+        function log(message) {
+            const p = document.createElement('p');
+            p.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            p.style.margin = '5px 0';
+            p.style.fontSize = '11px';
+            debugOutput.appendChild(p);
+            debugOutput.scrollTop = debugOutput.scrollHeight;
+
+            // 限制日志数量
+            if (debugOutput.children.length > 30) {
+                debugOutput.removeChild(debugOutput.firstChild);
+            }
+
+            console.log(message);
+        }
+
+        function checkUIRoot() {
+            const uiHost = document.getElementById('wve-host');
+            log(`UI Host exists: ${!!uiHost}`);
+
+            if (uiHost) {
+                log(`UI Host children: ${uiHost.children.length}`);
+                log(`Shadow root exists: ${!!uiHost.shadowRoot}`);
+
+                if (uiHost.shadowRoot) {
+                    log(`Shadow root children: ${uiHost.shadowRoot.children.length}`);
+                }
+            }
+        }
+
+        function checkToolbar() {
+            const uiHost = document.getElementById('wve-host');
+            if (uiHost && uiHost.shadowRoot) {
+                const toolbar = uiHost.shadowRoot.querySelector('#wve-floating-toolbar');
+                log(`Toolbar exists: ${!!toolbar}`);
+
+                if (toolbar) {
+                    log(`Toolbar classes: ${toolbar.className}`);
+                    log(`Toolbar computed display: ${getComputedStyle(toolbar).display}`);
+                    log(`Toolbar computed visibility: ${getComputedStyle(toolbar).visibility}`);
+                    log(`Toolbar computed opacity: ${getComputedStyle(toolbar).opacity}`);
+                }
+            } else {
+                log('No UI Host or Shadow Root found');
+            }
+        }
+
+        function syncStyles() {
+            if (window.WVE && window.WVE.WebVisualEditor) {
+                const editor = window.webVisualEditor || window.WVE.WebVisualEditor.instance;
+                if (editor && editor.uiManager && editor.uiManager.syncTailwindStyles) {
+                    log('Triggering manual style sync...');
+                    editor.uiManager.syncTailwindStyles();
+                    log('Style sync completed');
+                } else {
+                    log('UIManager not available');
+                }
+            } else {
+                log('WebVisualEditor not available');
+            }
+        }
+
+        function showShadowContent() {
+            const uiHost = document.getElementById('wve-host');
+            if (uiHost && uiHost.shadowRoot) {
+                const shadowHTML = uiHost.shadowRoot.innerHTML;
+                log(`Shadow DOM content length: ${shadowHTML.length} characters`);
+                console.log('Shadow DOM HTML:', shadowHTML);
+            } else {
+                log('No shadow root to display');
+            }
+        }
+
+        // 页面加载后自动检查
+        window.addEventListener('load', function() {
+            setTimeout(() => {
+                log('🚀 页面加载完成，开始自动检查...');
+                checkUIRoot();
+                checkToolbar();
+            }, 1000);
+        });
+
+        // 监听选择事件
+        document.addEventListener('wveSelectionChange', function(event) {
+            log(`📢 选择事件: ${event.detail?.selected?.length || 0} 个元素`);
+        });
+    </script>
+</body>
+</html>

@@ -463,7 +463,7 @@ window.WVE.UIManager = class UIManager {
    * 可供其他模块调用，确保动态添加的内容能正确应用样式
    */
   syncTailwindStyles(htmlContent = null) {
-    this.logger.debug('Manual Tailwind style sync triggered');
+    this.logger.info('Manual Tailwind style sync triggered');
 
     // 如果提供了HTML内容，直接检测其中的任意值类
     if (htmlContent) {
@@ -472,6 +472,12 @@ window.WVE.UIManager = class UIManager {
 
     // 扫描当前Shadow DOM中的任意值类
     this.scanExistingArbitraryClasses();
+
+    // 强制重新采集并注入 Tailwind 样式
+    this.logger.info('Force re-adopting Tailwind styles');
+    setTimeout(() => {
+      this.adoptTailwindStyles();
+    }, 0);
 
     // 然后刷新样式
     this.refreshTailwindStyles();
@@ -491,7 +497,9 @@ window.WVE.UIManager = class UIManager {
    * @param {string} content - 包含 Tailwind 类的内容
    */
   detectAndGenerateArbitraryValues(content) {
-    if (!content) return;
+    if (!content) {
+      return;
+    }
 
     // 匹配所有 Tailwind 类，包括任意值类和常规类（支持点号、冒号等）
     const allTailwindClassRegex = /\b[\w.:-]+(?:\[([^\]]+)\])?/g;
@@ -502,7 +510,9 @@ window.WVE.UIManager = class UIManager {
       this.logger.info(`[DEBUG] Content contains hover:bg-[#383838], regex matches:`, matches.filter(m => m.includes('383838')));
     }
 
-    if (matches.length === 0) return;
+    if (matches.length === 0) {
+      return;
+    }
 
     this.logger.debug(`Detected Tailwind classes:`, matches);
 
@@ -582,7 +592,9 @@ window.WVE.UIManager = class UIManager {
    * 监听 Shadow DOM 内容变化，自动检测并生成任意值类
    */
   setupDynamicArbitraryValueDetection() {
-    if (!this.uiRoot) return;
+    if (!this.uiRoot) {
+      return;
+    }
 
     const observer = new MutationObserver((mutations) => {
       const arbitraryClassesToGenerate = new Set();
@@ -737,7 +749,9 @@ window.WVE.UIManager = class UIManager {
    * 扫描现有内容中的Tailwind类并预先生成
    */
   scanExistingArbitraryClasses() {
-    if (!this.uiRoot) return;
+    if (!this.uiRoot) {
+      return;
+    }
 
     this.logger.debug('Scanning existing Tailwind classes in Shadow DOM');
 

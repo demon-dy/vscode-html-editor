@@ -6,6 +6,9 @@ class Logger {
     this.module = module;
     this.prefix = `[WVE:${module}]`;
     this.isEnabled = true;
+
+    // 日志级别: 0=debug, 1=info, 2=warn, 3=error
+    this.level = window.WVE?.config?.logLevel ?? 1; // 默认只显示 info 及以上级别
   }
 
   /**
@@ -16,10 +19,17 @@ class Logger {
   }
 
   /**
+   * 设置日志级别
+   */
+  setLevel(level) {
+    this.level = level;
+  }
+
+  /**
    * 调试日志
    */
   debug(...args) {
-    if (this.isEnabled) {
+    if (this.isEnabled && this.level <= 0) {
       console.debug(this.prefix, ...args);
     }
   }
@@ -28,7 +38,7 @@ class Logger {
    * 信息日志
    */
   info(...args) {
-    if (this.isEnabled) {
+    if (this.isEnabled && this.level <= 1) {
       console.info(this.prefix, ...args);
     }
   }
@@ -37,7 +47,7 @@ class Logger {
    * 警告日志
    */
   warn(...args) {
-    if (this.isEnabled) {
+    if (this.isEnabled && this.level <= 2) {
       console.warn(this.prefix, ...args);
     }
   }
@@ -46,7 +56,7 @@ class Logger {
    * 错误日志
    */
   error(...args) {
-    if (this.isEnabled) {
+    if (this.isEnabled && this.level <= 3) {
       console.error(this.prefix, ...args);
     }
   }

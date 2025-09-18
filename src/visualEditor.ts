@@ -616,22 +616,32 @@ export class VisualEditorProvider implements vscode.CustomTextEditorProvider {
       propertyPanel: {
         enabled: config.get<boolean>('features.propertyPanel', true),
         scripts: [
-          // Figma 风格属性面板（新架构）
+          // 新布局模式优先的属性面板架构
           { path: 'modules/ui/property-panel/PropertyControls.js', description: '通用属性控件库' },
           { path: 'modules/ui/property-panel/PropertySectionBase.js', description: '属性区域基础类' },
-          { path: 'modules/ui/property-panel/PositionSection.js', description: 'Position 属性区域' },
-          { path: 'modules/ui/property-panel/AutoLayoutSection.js', description: 'Auto Layout 属性区域' },
-          { path: 'modules/ui/property-panel/AppearanceSection.js', description: 'Appearance 属性区域' },
-          { path: 'modules/ui/property-panel/EffectsSection.js', description: 'Effects 属性区域' },
-          { path: 'modules/ui/property-panel/PropertyPanel.js', description: 'Figma 风格属性面板主类' },
-          // PropertyPanel 是完全自包含的，不需要额外的样式管理模块
+
+          // 布局模式选择器（核心组件）
+          { path: 'modules/ui/property-panel/LayoutModeSection.js', description: '布局模式选择器' },
+
+          // 各种布局模式对应的区域
+          { path: 'modules/ui/property-panel/NoneLayoutSection.js', description: '无布局模式属性区域' },
+          { path: 'modules/ui/property-panel/AbsoluteLayoutSection.js', description: '绝对布局模式属性区域' },
+          { path: 'modules/ui/property-panel/FlexLayoutSection.js', description: '响应式布局模式属性区域' },
+          { path: 'modules/ui/property-panel/GridLayoutSection.js', description: '网格布局模式属性区域' },
+
+          // 样式属性标签页
+          { path: 'modules/ui/property-panel/StyleTabsSection.js', description: '样式属性标签页区域' },
+
+          // 主面板管理器（必须最后加载）
+          { path: 'modules/ui/property-panel/PropertyPanel.js', description: '新属性面板主类' },
+
+          // 保留原有区域用于兼容性（如果需要）
+          { path: 'modules/ui/property-panel/PositionSection.js', description: 'Position 属性区域（兼容）' },
+          { path: 'modules/ui/property-panel/AutoLayoutSection.js', description: 'Auto Layout 属性区域（兼容）' },
+          { path: 'modules/ui/property-panel/AppearanceSection.js', description: 'Appearance 属性区域（兼容）' },
+          { path: 'modules/ui/property-panel/EffectsSection.js', description: 'Effects 属性区域（兼容）' }
         ]
       },
-      // 旧版面板已被移除，此配置保留用于将来可能的扩展
-      // legacyPanels: {
-      //   enabled: false, // 强制禁用，因为文件已删除
-      //   scripts: []
-      // },
       dragDrop: {
         enabled: config.get<boolean>('features.dragDrop', false),
         scripts: [

@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>新属性面板测试页面</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .test-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 2px dashed #ddd;
+            border-radius: 8px;
+        }
+
+        .test-section h3 {
+            margin-top: 0;
+            color: #333;
+            border-bottom: 2px solid #007acc;
+            padding-bottom: 10px;
+        }
+
+        .flex-container {
+            display: flex;
+            gap: 15px;
+            padding: 15px;
+            background: #e3f2fd;
+            border-radius: 6px;
+            margin: 10px 0;
+        }
+
+        .flex-item {
+            background: #2196f3;
+            color: white;
+            padding: 15px;
+            border-radius: 4px;
+            min-width: 100px;
+            text-align: center;
+        }
+
+        .grid-container {
+            display: grid;
+            grid-template-columns: 1fr 2fr 1fr;
+            grid-template-rows: auto 1fr auto;
+            gap: 15px;
+            padding: 15px;
+            background: #f3e5f5;
+            border-radius: 6px;
+            margin: 10px 0;
+            min-height: 200px;
+        }
+
+        .grid-item {
+            background: #9c27b0;
+            color: white;
+            padding: 15px;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .absolute-container {
+            position: relative;
+            height: 200px;
+            background: #fff3e0;
+            border-radius: 6px;
+            margin: 10px 0;
+        }
+
+        .absolute-item {
+            position: absolute;
+            background: #ff9800;
+            color: white;
+            padding: 10px 15px;
+            border-radius: 4px;
+        }
+
+        .normal-text {
+            padding: 15px;
+            background: #e8f5e8;
+            border-radius: 6px;
+            margin: 10px 0;
+            line-height: 1.6;
+        }
+
+        .styled-button {
+            background: linear-gradient(45deg, #ff6b6b, #ee5a24);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 25px;
+            font-size: 16px;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(255, 107, 107, 0.4);
+            transition: all 0.3s ease;
+        }
+
+        .styled-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(255, 107, 107, 0.6);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>新属性面板测试页面</h1>
+        <p>这个页面用于测试新的"布局模式优先"属性面板设计。选择不同的元素来查看属性面板的反应。</p>
+
+        <div class="test-section">
+            <h3>🎯 无布局模式测试</h3>
+            <div class="normal-text">
+                这是一个普通的文本块，使用默认的文档流布局。选择这个元素应该显示"无布局"模式，
+                包含显示模式、内外边距和文本对齐等控制选项。
+            </div>
+            <p>这是一个普通段落，也使用文档流布局。</p>
+            <button class="styled-button">样式化按钮</button>
+        </div>
+
+        <div class="test-section">
+            <h3>↔️ 响应式布局模式测试 (Flexbox)</h3>
+            <div class="flex-container">
+                <div class="flex-item">Flex Item 1</div>
+                <div class="flex-item">Flex Item 2</div>
+                <div class="flex-item">Flex Item 3</div>
+            </div>
+            <p>选择上方的flex容器应该显示"响应式布局"模式，包含方向、换行、对齐、间距等Flexbox控制选项。</p>
+        </div>
+
+        <div class="test-section">
+            <h3>⊞ 网格布局模式测试 (CSS Grid)</h3>
+            <div class="grid-container">
+                <div class="grid-item" style="grid-column: 1 / -1;">Header</div>
+                <div class="grid-item">Sidebar</div>
+                <div class="grid-item">Main Content</div>
+                <div class="grid-item">Aside</div>
+                <div class="grid-item" style="grid-column: 1 / -1;">Footer</div>
+            </div>
+            <p>选择上方的grid容器应该显示"网格布局"模式，包含网格模板、间距、对齐等Grid控制选项。</p>
+        </div>
+
+        <div class="test-section">
+            <h3>📌 绝对布局模式测试</h3>
+            <div class="absolute-container">
+                <div class="absolute-item" style="top: 20px; left: 20px;">Top-Left</div>
+                <div class="absolute-item" style="top: 20px; right: 20px;">Top-Right</div>
+                <div class="absolute-item" style="bottom: 20px; left: 50%; transform: translateX(-50%);">Bottom-Center</div>
+            </div>
+            <p>选择上方的绝对定位元素应该显示"绝对布局"模式，包含定位类型、位置设置、层级和变换等控制选项。</p>
+        </div>
+
+        <div class="test-section">
+            <h3>🎨 样式属性测试</h3>
+            <div style="background: linear-gradient(45deg, #667eea 0%, #764ba2 100%);
+                        color: white;
+                        padding: 20px;
+                        border-radius: 10px;
+                        box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+                        transform: rotate(1deg);">
+                这个元素有复杂的样式，包括渐变背景、圆角、阴影和旋转变换。
+                选择它来测试样式属性标签页的各个功能。
+            </div>
+            <br>
+            <span style="font-family: 'Courier New', monospace;
+                         font-size: 18px;
+                         font-weight: bold;
+                         color: #e74c3c;
+                         text-decoration: underline;
+                         text-shadow: 2px 2px 4px rgba(0,0,0,0.3);">
+                这是一个有特殊字体样式的文本，用于测试文字标签页。
+            </span>
+        </div>
+
+        <div class="test-section">
+            <h3>📐 尺寸测试</h3>
+            <div style="width: 300px;
+                        height: 150px;
+                        max-width: 500px;
+                        min-height: 100px;
+                        overflow: hidden;
+                        background: #f8f9fa;
+                        border: 2px solid #dee2e6;
+                        border-radius: 8px;
+                        padding: 15px;">
+                这个元素有特定的尺寸限制和溢出控制，用于测试尺寸标签页的功能。
+                这里有很多文本内容，可能会导致溢出，这样可以测试overflow属性的控制。
+                更多的文本内容来填充这个容器，确保内容足够多以测试滚动和溢出的效果。
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h3>🔄 动态测试</h3>
+            <p>使用属性面板修改元素的布局模式，观察面板如何动态切换不同的控制选项：</p>
+            <div id="dynamic-test" style="padding: 20px; background: #f0f8ff; border: 1px solid #b0c4de;">
+                <div>子元素 1</div>
+                <div>子元素 2</div>
+                <div>子元素 3</div>
+            </div>
+            <p>尝试：</p>
+            <ol>
+                <li>选择上方容器，将其从"无布局"改为"响应式布局"</li>
+                <li>调整Flexbox的方向和对齐方式</li>
+                <li>切换到"网格布局"模式</li>
+                <li>设置网格模板和间距</li>
+                <li>选择子元素，测试子元素在flex/grid容器中的控制选项</li>
+            </ol>
+        </div>
+    </div>
+
+    <script>
+        // 简单的交互脚本，用于测试
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('新属性面板测试页面已加载');
+            console.log('页面包含以下测试元素：');
+            console.log('- 无布局元素（文档流）');
+            console.log('- Flexbox容器和子元素');
+            console.log('- Grid容器和子元素');
+            console.log('- 绝对定位元素');
+            console.log('- 复杂样式元素');
+            console.log('- 特定尺寸元素');
+            console.log('请在VSCode中打开此文件，并使用新的属性面板进行测试');
+        });
+    </script>
+</body>
+</html>
