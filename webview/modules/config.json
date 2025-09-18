@@ -20,6 +20,8 @@
     "layout": {
       "description": "布局管理模块",
       "files": [
+        "modules/layout/LayoutMappings.js",
+        "modules/layout/LayoutAdapter.js",
         "modules/layout/MovableManager.js"
       ],
       "dependencies": ["core"]
@@ -29,9 +31,16 @@
       "files": [
         "modules/ui/UIManager.js",
         "modules/ui/FloatingToolbar.js",
-        "modules/ui/ToolbarDragHandler.js"
+        "modules/ui/ToolbarDragHandler.js",
+        "modules/ui/property-panel/PropertyControls.js",
+        "modules/ui/property-panel/PropertySectionBase.js",
+        "modules/ui/property-panel/PositionSection.js",
+        "modules/ui/property-panel/AutoLayoutSection.js",
+        "modules/ui/property-panel/AppearanceSection.js",
+        "modules/ui/property-panel/EffectsSection.js",
+        "modules/ui/property-panel/PropertyPanel.js"
       ],
-      "dependencies": ["core"]
+      "dependencies": ["core", "layout"]
     },
     "interaction": {
       "description": "交互处理模块",

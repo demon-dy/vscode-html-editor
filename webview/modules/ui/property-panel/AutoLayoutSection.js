@@ -33,6 +33,10 @@ window.WVE.AutoLayoutSection = class AutoLayoutSection extends window.WVE.Proper
       bottom: null,
       left: null
     };
+
+    // 布局适配器相关
+    this.layoutAdapter = null;
+    this.uiManager = options.uiManager || null;
   }
 
   /**

@@ -235,22 +235,26 @@ window.WVE.PropertyPanel = class PropertyPanel {
   createSections() {
     // Position 区域
     this.sections.position = new window.WVE.PositionSection({
-      collapsed: this.persisted.sections.position.collapsed
+      collapsed: this.persisted.sections.position.collapsed,
+      uiManager: this.uiManager
     });
 
     // Auto Layout 区域
     this.sections.autoLayout = new window.WVE.AutoLayoutSection({
-      collapsed: this.persisted.sections.autoLayout.collapsed
+      collapsed: this.persisted.sections.autoLayout.collapsed,
+      uiManager: this.uiManager
     });
 
     // Appearance 区域
     this.sections.appearance = new window.WVE.AppearanceSection({
-      collapsed: this.persisted.sections.appearance.collapsed
+      collapsed: this.persisted.sections.appearance.collapsed,
+      uiManager: this.uiManager
     });
 
     // Effects 区域
     this.sections.effects = new window.WVE.EffectsSection({
-      collapsed: this.persisted.sections.effects.collapsed
+      collapsed: this.persisted.sections.effects.collapsed,
+      uiManager: this.uiManager
     });
 
     // 添加到面板

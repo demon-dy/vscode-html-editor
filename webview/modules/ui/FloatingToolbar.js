@@ -31,7 +31,7 @@ window.WVE.FloatingToolbar = class FloatingToolbar {
     this.toolbar.id = 'wve-floating-toolbar';
     this.toolbar.className = 'fixed bottom-5 flex items-center bg-[#2c2c2c] rounded-lg shadow-xl backdrop-blur-sm pr-0.5';
     this.toolbar.style.zIndex = '50000'; // 确保在属性面板(40000)上方
-    this.toolbar.style.boxShadow = '0px 3px 8px rgba(0, 0, 0, .35), 0px 1px 3px rgba(0, 0, 0, .5), inset 0px 1px 0px rgba(255, 255, 255, .08), inset 0px 0px 1px rgba(255, 255, 255, .3)'
+    this.toolbar.style.boxShadow = '0px 3px 8px rgba(0, 0, 0, .35), 0px 1px 3px rgba(0, 0, 0, .5), inset 0px 1px 0px rgba(255, 255, 255, .08), inset 0px 0px 1px rgba(255, 255, 255, .3)';
 
     // 手动设置居中定位，确保兼容性
     this.toolbar.style.left = '50%';

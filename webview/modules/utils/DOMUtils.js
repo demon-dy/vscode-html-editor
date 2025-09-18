@@ -47,7 +47,7 @@ window.WVE.DOMUtils = {
    * 获取真实位置坐标（考虑缩放）
    */
   realPositionOf(event, zoom = '1') {
-    this.logger.debug('Calculating real position for event:', event, 'zoom:', zoom);
+    // this.logger.debug('Calculating real position for event:', event, 'zoom:', zoom);
 
     // 处理 shadow DOM 下事件重定向
     const path = event.composedPath ? event.composedPath() : [];

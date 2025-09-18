@@ -285,7 +285,8 @@ window.WVE.UIManager = class UIManager {
     this.triggerElement.style.cssText = 'position: absolute; left: -9999px; top: -9999px; opacity: 0; pointer-events: none;';
 
     // 最小化触发元素，只保留容器
-    this.triggerElement.innerHTML = `<div></div>`;
+    this.triggerElement.innerHTML = `<div>
+    </div>`;
 
     document.body.appendChild(this.triggerElement);
     this.logger.debug('Added Tailwind trigger classes to document');

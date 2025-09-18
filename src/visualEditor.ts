@@ -531,6 +531,8 @@ export class VisualEditorProvider implements vscode.CustomTextEditorProvider {
       { path: 'modules/core/EventManager.js', description: '事件管理', required: true },
 
       // 布局模块
+      { path: 'modules/layout/LayoutMappings.js', description: '布局映射规则', required: true },
+      { path: 'modules/layout/LayoutAdapter.js', description: '智能布局适配器', required: true },
       { path: 'modules/layout/MovableManager.js', description: '可移动元素管理', required: true },
 
       // UI模块
