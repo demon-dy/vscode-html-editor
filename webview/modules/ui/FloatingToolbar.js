@@ -29,8 +29,9 @@ window.WVE.FloatingToolbar = class FloatingToolbar {
     const fragment = new DocumentFragment();
     this.toolbar = document.createElement('div');
     this.toolbar.id = 'wve-floating-toolbar';
-    this.toolbar.className = 'fixed bottom-5 flex items-center px-3 py-2 bg-gray-800 rounded-lg shadow-xl backdrop-blur-sm';
+    this.toolbar.className = 'fixed bottom-5 flex items-center bg-[#2c2c2c] rounded-lg shadow-xl backdrop-blur-sm pr-0.5';
     this.toolbar.style.zIndex = '50000'; // 确保在属性面板(40000)上方
+    this.toolbar.style.boxShadow = '0px 3px 8px rgba(0, 0, 0, .35), 0px 1px 3px rgba(0, 0, 0, .5), inset 0px 1px 0px rgba(255, 255, 255, .08), inset 0px 0px 1px rgba(255, 255, 255, .3)'
 
     // 手动设置居中定位，确保兼容性
     this.toolbar.style.left = '50%';
@@ -78,6 +79,14 @@ window.WVE.FloatingToolbar = class FloatingToolbar {
       this.showDimensions();
     }, 500);
 
+    // 触发样式同步，确保任意值类生效
+    
+    if (this.uiManager && typeof this.uiManager.syncTailwindStyles === 'function') {
+      // 传递toolbar的HTML内容用于动态检测任意值类
+      const toolbarHtml = this.toolbar.outerHTML;
+      this.uiManager.syncTailwindStyles(toolbarHtml);
+    }
+
     this.logger.info('Floating toolbar created successfully');
   }
 
@@ -89,28 +98,28 @@ window.WVE.FloatingToolbar = class FloatingToolbar {
 
     this.toolbar.innerHTML = `
       <!-- 拖拽手柄 -->
-      <div class="flex items-center cursor-grab hover:bg-gray-700 rounded p-1 transition-colors mr-2" id="${c.toolbarDragHandle}" title="拖拽移动工具栏">
+      <div class="flex items-center cursor-grab rounded p-1 transition-colors mr-2" id="${c.toolbarDragHandle}" title="拖拽移动工具栏">
         <i data-lucide="grip-vertical" class="w-3 h-3 text-gray-500"></i>
       </div>
 
       <!-- 常规操作区域 -->
       <div class="flex items-center gap-1">
-        <button id="${c.toolbarLinkCode}" type="button" class="flex items-center justify-center w-8 h-8 rounded hover:bg-gray-700 text-gray-400 hover:text-white transition-all duration-200" title="关联代码">
+        <button id="${c.toolbarLinkCode}" type="button" class="flex items-center justify-center w-6 h-6 rounded hover:bg-gray-700 text-gray-400 hover:text-white transition-all duration-200" title="关联代码">
           <i data-lucide="link" class="w-4 h-4"></i>
         </button>
-        <button id="${c.toolbarRefresh}" type="button" class="flex items-center justify-center w-8 h-8 rounded hover:bg-gray-700 text-gray-400 hover:text-white transition-all duration-200" title="刷新视图">
+        <button id="${c.toolbarRefresh}" type="button" class="flex items-center justify-center w-6 h-6 rounded hover:bg-gray-700 text-gray-400 hover:text-white transition-all duration-200" title="刷新视图">
           <i data-lucide="refresh-cw" class="w-4 h-4"></i>
         </button>
-        <div class="flex bg-[#444444] rounded">
-          <button id="${c.toolbarZoomOut}" type="button" class="flex items-center justify-center w-8 h-8 rounded hover:bg-gray-700 text-gray-400 hover:text-white transition-all duration-200" title="缩小视图">
+        <div class="flex bg-[#444444] rounded p-[2px] items-center">
+          <button id="${c.toolbarZoomOut}" type="button" class="flex items-center justify-center w-5 h-5 rounded hover:bg-gray-700 text-gray-400 hover:text-white transition-all duration-200" title="缩小视图">
             <i data-lucide="zoom-out" class="w-4 h-4"></i>
           </button>
-          <span id="${c.toolbarZoomValue}" class="py-1 text-sm font-medium text-gray-300 bg-gray-700 rounded min-w-16 text-center mx-1">100%</span>
-          <button id="${c.toolbarZoomIn}" type="button" class="flex items-center justify-center w-8 h-8 rounded hover:bg-gray-700 text-gray-400 hover:text-white transition-all duration-200" title="放大视图">
+          <span id="${c.toolbarZoomValue}" class="text-sm font-medium text-gray-300 rounded min-w-8 text-center mx-1">100%</span>
+          <button id="${c.toolbarZoomIn}" type="button" class="flex items-center justify-center w-5 h-5 rounded hover:bg-gray-700 text-gray-400 hover:text-white transition-all duration-200" title="放大视图">
             <i data-lucide="zoom-in" class="w-4 h-4"></i>
           </button>
         </div>
-        <select id="${c.toolbarDeviceSelector}" class="px-2 py-2 text-xs bg-[#444444] text-gray-400 border-0 rounded cursor-pointer hover:bg-[#383838] ml-1" title="设备预览">
+        <select id="${c.toolbarDeviceSelector}" class="p-1 text-xs bg-[#444444] text-gray-400 border-0 rounded cursor-pointer hover:bg-[#383838] ml-1" title="设备预览">
           <option value="desktop" style="background-color: #374151; color: #d1d5db;">1440 桌面</option>
           <option value="laptop" style="background-color: #374151; color: #d1d5db;">1024 笔记本</option>
           <option value="tablet" style="background-color: #374151; color: #d1d5db;">768 平板</option>
@@ -121,19 +130,19 @@ window.WVE.FloatingToolbar = class FloatingToolbar {
       </div>
 
       <!-- 分割线 -->
-      <div class="w-[1px] h-[32px] mx-3 bg-[#444444]"></div>
+      <div class="w-[1px] h-[32px] mx-1 bg-[#444444]"></div>
 
       <!-- 模式选择区域 -->
-      <div class="flex items-center bg-[#444444] rounded gap-1" role="radiogroup" aria-label="模式切换">
+      <div class="flex items-center bg-[#444444] rounded gap-1 p-0.5" role="radiogroup" aria-label="模式切换">
         <label id="${c.toolbarEditModeLabel}" class="flex" role="radio" aria-checked="true" tabindex="0" title="编辑模式">
           <input id="${c.toolbarEditMode}" class="wve-mode-radio" type="radio" name="wve-mode" value="edit" checked>
-          <span id="${c.toolbarEditModeButton}" class="flex items-center justify-center w-8 h-8 rounded text-gray-300 hover:text-white hover:bg-gray-600 transition-all duration-200">
+          <span id="${c.toolbarEditModeButton}" class="flex items-center justify-center w-5 h-5 rounded text-gray-300 hover:text-white hover:bg-gray-600 transition-all duration-200">
             <i data-lucide="edit-3" class="w-4 h-4"></i>
           </span>
         </label>
         <label id="${c.toolbarPreviewModeLabel}" class="flex" role="radio" aria-checked="false" tabindex="-1" title="预览模式">
           <input id="${c.toolbarPreviewMode}" class="wve-mode-radio" type="radio" name="wve-mode" value="preview">
-          <span id="${c.toolbarPreviewModeButton}" class="flex items-center justify-center w-8 h-8 rounded text-gray-300 hover:text-white hover:bg-gray-600 transition-all duration-200">
+          <span id="${c.toolbarPreviewModeButton}" class="flex items-center justify-center w-5 h-5 rounded text-gray-300 hover:text-white hover:bg-gray-600 transition-all duration-200">
             <i data-lucide="eye" class="w-4 h-4"></i>
           </span>
         </label>
@@ -356,13 +365,13 @@ window.WVE.FloatingToolbar = class FloatingToolbar {
 
     // 更新按钮选中状态样式
     if (this.toolbarEditModeButton) {
-      this.toolbarEditModeButton.classList.toggle('bg-blue-600', isEditMode);
+      this.toolbarEditModeButton.classList.toggle('bg-[#2c2c2c]', isEditMode);
       this.toolbarEditModeButton.classList.toggle('text-white', isEditMode);
       this.toolbarEditModeButton.classList.toggle('shadow-sm', isEditMode);
     }
 
     if (this.toolbarPreviewModeButton) {
-      this.toolbarPreviewModeButton.classList.toggle('bg-blue-600', isPreviewMode);
+      this.toolbarPreviewModeButton.classList.toggle('bg-[#3f8ae2]', isPreviewMode);
       this.toolbarPreviewModeButton.classList.toggle('text-white', isPreviewMode);
       this.toolbarPreviewModeButton.classList.toggle('shadow-sm', isPreviewMode);
     }
@@ -471,11 +480,11 @@ window.WVE.FloatingToolbar = class FloatingToolbar {
    */
   updateLinkCodeButton() {
     if (this.stateManager.linkCode) {
-      this.toolbarLinkCode.classList.add('bg-blue-600', 'text-white');
+      this.toolbarLinkCode.classList.add('bg-[#3f8ae2]', 'text-white');
       this.toolbarLinkCode.classList.remove('text-gray-400', 'hover:text-white');
       this.toolbarLinkCode.title = '关联代码 (已启用)';
     } else {
-      this.toolbarLinkCode.classList.remove('bg-blue-600', 'text-white');
+      this.toolbarLinkCode.classList.remove('bg-[#3f8ae2]', 'text-white');
       this.toolbarLinkCode.classList.add('text-gray-400', 'hover:text-white');
       this.toolbarLinkCode.title = '关联代码 (已禁用)';
     }

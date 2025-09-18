@@ -111,9 +111,6 @@ window.WVE.UIManager = class UIManager {
       #wve-floating-toolbar {
         font-family: var(--vscode-font-family, system-ui, -apple-system, Segoe UI, Roboto, Arial);
         font-size: 12px;
-        color: var(--vscode-foreground, #111);
-        background: var(--vscode-editor-background, #fff);
-        border-color: var(--vscode-widget-border, #e5e7eb);
         zoom: 1 !important;
       }
       #wve-floating-toolbar.dragging {
@@ -287,44 +284,8 @@ window.WVE.UIManager = class UIManager {
     this.triggerElement = document.createElement('div');
     this.triggerElement.style.cssText = 'position: absolute; left: -9999px; top: -9999px; opacity: 0; pointer-events: none;';
 
-    // 添加常用的 Tailwind 类，触发 CDN 生成样式
-    this.triggerElement.innerHTML = `
-      <div class="flex flex-col grid items-center justify-center justify-between gap-1 gap-2 gap-4 gap-8">
-        <div class="fixed absolute relative top-0 right-0 bottom-0 left-0 z-10 z-20 z-50">
-          <div class="w-3 w-4 w-5 w-8 w-12 w-14 w-16 w-full w-auto h-3 h-4 h-5 h-8 h-12 h-14 h-16 h-full h-auto">
-            <div class="p-0 p-1 p-2 p-3 p-4 px-1 px-2 px-3 px-4 py-1 py-2 py-3 py-4">
-              <div class="m-0 m-1 m-2 m-3 m-4 mx-1 mx-2 mx-3 mx-4 my-1 my-2 my-3 my-4">
-                <div class="rounded rounded-md rounded-lg rounded-full rounded-none border border-0 border-2">
-                  <div class="border-gray-200 border-gray-300 border-blue-500 bg-white bg-gray-50 bg-gray-100 bg-gray-200">
-                    <div class="bg-gray-800 bg-gray-900 bg-blue-500 bg-blue-600 bg-red-500 bg-green-500 bg-[#444444] bg-[#383838]">
-                      <div class="text-gray-400 text-gray-500 text-gray-600 text-gray-700 text-gray-800 text-gray-900">
-                        <div class="text-white text-blue-500 text-red-500 text-green-500 text-xs text-sm text-base text-lg">
-                          <div class="font-normal font-medium font-semibold font-bold cursor-pointer cursor-grab cursor-grabbing">
-                            <div class="cursor-move cursor-default select-none pointer-events-none pointer-events-auto">
-                              <div class="shadow shadow-sm shadow-md shadow-lg shadow-xl backdrop-blur-sm backdrop-blur">
-                                <div class="transition transition-all transition-colors transition-transform duration-150 duration-200 duration-300">
-                                  <div class="ease-in-out ease-out hover:bg-gray-50 hover:bg-gray-100 hover:bg-gray-200">
-                                    <div class="hover:text-gray-600 hover:text-gray-700 hover:text-gray-800 hover:shadow-md hover:scale-105">
-                                      <div class="focus:outline-none focus:ring-1 focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
-                                        Content
-                                      </div>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    `;
+    // 最小化触发元素，只保留容器
+    this.triggerElement.innerHTML = `<div></div>`;
 
     document.body.appendChild(this.triggerElement);
     this.logger.debug('Added Tailwind trigger classes to document');
@@ -500,8 +461,18 @@ window.WVE.UIManager = class UIManager {
    * 手动触发 Tailwind 样式同步
    * 可供其他模块调用，确保动态添加的内容能正确应用样式
    */
-  syncTailwindStyles() {
+  syncTailwindStyles(htmlContent = null) {
     this.logger.debug('Manual Tailwind style sync triggered');
+
+    // 如果提供了HTML内容，直接检测其中的任意值类
+    if (htmlContent) {
+      this.detectAndGenerateArbitraryValues(htmlContent);
+    }
+
+    // 扫描当前Shadow DOM中的任意值类
+    this.scanExistingArbitraryClasses();
+
+    // 然后刷新样式
     this.refreshTailwindStyles();
   }
 
@@ -521,17 +492,28 @@ window.WVE.UIManager = class UIManager {
   detectAndGenerateArbitraryValues(content) {
     if (!content) return;
 
-    // 匹配所有任意值的 Tailwind 类，如 bg-[#444444], w-[100px], text-[14px] 等
-    const arbitraryValueRegex = /\b[\w-]+\[([^\]]+)\]/g;
-    const matches = content.match(arbitraryValueRegex) || [];
+    // 匹配所有 Tailwind 类，包括任意值类和常规类（支持点号、冒号等）
+    const allTailwindClassRegex = /\b[\w.:-]+(?:\[([^\]]+)\])?/g;
+    const matches = content.match(allTailwindClassRegex) || [];
+
+    // 调试：检查是否包含目标hover类
+    if (content.includes('hover:bg-[#383838]')) {
+      this.logger.info(`[DEBUG] Content contains hover:bg-[#383838], regex matches:`, matches.filter(m => m.includes('383838')));
+    }
 
     if (matches.length === 0) return;
 
-    this.logger.debug(`Detected arbitrary value classes:`, matches);
+    this.logger.debug(`Detected Tailwind classes:`, matches);
+
+    // 特别调试包含hover:bg-[#383838]的情况
+    const hasTargetClass = matches.some(cls => cls.includes('hover:bg-[#383838]') || cls.includes('bg-[#383838]'));
+    if (hasTargetClass) {
+      this.logger.info('Found target hover:bg-[#383838] class, generating...');
+    }
 
     // 检查 Tailwind CDN 是否可用
     if (!window.tailwind) {
-      this.logger.warn('Tailwind CDN not available, deferring arbitrary value generation');
+      this.logger.warn('Tailwind CDN not available, deferring class generation');
       // 延迟重试
       setTimeout(() => {
         this.detectAndGenerateArbitraryValues(content);
@@ -546,9 +528,42 @@ window.WVE.UIManager = class UIManager {
 
     document.body.appendChild(tempElement);
 
+    // 对于有hover类的情况，模拟hover状态
+    const hasHoverClasses = matches.some(cls => cls.startsWith('hover:'));
+    if (hasHoverClasses) {
+      // 创建一个实际的hover触发元素
+      const hoverTrigger = document.createElement('div');
+      hoverTrigger.style.cssText = 'position: absolute; left: -9999px; top: -9999px; width: 1px; height: 1px; opacity: 0; pointer-events: auto;';
+      hoverTrigger.className = matches.join(' ');
+      document.body.appendChild(hoverTrigger);
+
+      // 模拟鼠标悬停
+      setTimeout(() => {
+        const mouseEnterEvent = new MouseEvent('mouseenter', { bubbles: true });
+        hoverTrigger.dispatchEvent(mouseEnterEvent);
+
+        // 稍后移除悬停状态
+        setTimeout(() => {
+          const mouseLeaveEvent = new MouseEvent('mouseleave', { bubbles: true });
+          hoverTrigger.dispatchEvent(mouseLeaveEvent);
+
+          try {
+            document.body.removeChild(hoverTrigger);
+          } catch (e) {
+            // 忽略错误
+          }
+        }, 50);
+      }, 50);
+    }
+
     // 触发 Tailwind 扫描
     if (typeof window.tailwind.refresh === 'function') {
       window.tailwind.refresh();
+    }
+
+    // 如果有scan方法也调用
+    if (typeof window.tailwind.scan === 'function') {
+      window.tailwind.scan();
     }
 
     // 延迟移除元素并同步样式，给 Tailwind 足够时间生成样式
@@ -559,7 +574,7 @@ window.WVE.UIManager = class UIManager {
         // 元素可能已经被移除了
       }
       this.refreshTailwindStyles();
-    }, 200); // 增加延迟到200ms，确保样式生成完成
+    }, 300); // 增加延迟，确保样式生成完成
   }
 
   /**
@@ -575,7 +590,7 @@ window.WVE.UIManager = class UIManager {
         // 检查新增的节点
         mutation.addedNodes.forEach((node) => {
           if (node.nodeType === Node.ELEMENT_NODE) {
-            this.extractArbitraryClasses(node, arbitraryClassesToGenerate);
+            this.extractTailwindClasses(node, arbitraryClassesToGenerate);
           }
         });
 
@@ -583,7 +598,7 @@ window.WVE.UIManager = class UIManager {
         if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
           const target = mutation.target;
           if (target.nodeType === Node.ELEMENT_NODE) {
-            this.extractArbitraryClasses(target, arbitraryClassesToGenerate);
+            this.extractTailwindClasses(target, arbitraryClassesToGenerate);
           }
         }
       });
@@ -613,15 +628,21 @@ window.WVE.UIManager = class UIManager {
   }
 
   /**
-   * 从元素及其后代中提取任意值类
+   * 从元素及其后代中提取所有Tailwind类
    */
-  extractArbitraryClasses(element, classSet) {
+  extractTailwindClasses(element, classSet) {
     // 检查元素本身的类
     if (element.className) {
       const className = typeof element.className === 'string' ? element.className : element.className.toString();
-      const arbitraryValueRegex = /\b[\w-]+\[([^\]]+)\]/g;
-      const matches = className.match(arbitraryValueRegex) || [];
-      matches.forEach(cls => classSet.add(cls));
+      // 匹配所有可能的Tailwind类，包括带点号、冒号、任意值等
+      const tailwindClassRegex = /\b[\w.:-]+(?:\[([^\]]+)\])?/g;
+      const matches = className.match(tailwindClassRegex) || [];
+      matches.forEach(cls => {
+        // 过滤掉明显不是Tailwind的类（如ID选择器等）
+        if (this.isTailwindClass(cls)) {
+          classSet.add(cls);
+        }
+      });
     }
 
     // 递归检查所有后代元素
@@ -629,22 +650,97 @@ window.WVE.UIManager = class UIManager {
     descendants.forEach(desc => {
       if (desc.className) {
         const className = typeof desc.className === 'string' ? desc.className : desc.className.toString();
-        const arbitraryValueRegex = /\b[\w-]+\[([^\]]+)\]/g;
-        const matches = className.match(arbitraryValueRegex) || [];
-        matches.forEach(cls => classSet.add(cls));
+        const tailwindClassRegex = /\b[\w.:-]+(?:\[([^\]]+)\])?/g;
+        const matches = className.match(tailwindClassRegex) || [];
+        matches.forEach(cls => {
+          if (this.isTailwindClass(cls)) {
+            classSet.add(cls);
+          }
+        });
       }
     });
   }
 
   /**
-   * 扫描现有内容中的任意值类并预先生成
+   * 判断是否为Tailwind类
+   */
+  isTailwindClass(className) {
+    // 处理伪类、响应式前缀等复合类
+    let actualClass = className;
+    const originalClass = className;
+
+    // 移除所有修饰符前缀，获取基础类名
+    const modifierPrefixes = [
+      'hover:', 'focus:', 'active:', 'visited:', 'disabled:', 'checked:',
+      'group-hover:', 'group-focus:', 'focus-within:', 'focus-visible:',
+      'sm:', 'md:', 'lg:', 'xl:', '2xl:',
+      'dark:', 'light:',
+      'first:', 'last:', 'odd:', 'even:',
+      'before:', 'after:'
+    ];
+
+    // 移除修饰符前缀
+    for (const prefix of modifierPrefixes) {
+      if (actualClass.startsWith(prefix)) {
+        actualClass = actualClass.substring(prefix.length);
+        break; // 只移除第一个匹配的前缀
+      }
+    }
+
+    // 常见的Tailwind基础类前缀和模式
+    const tailwindPrefixes = [
+      'p-', 'px-', 'py-', 'pt-', 'pr-', 'pb-', 'pl-',
+      'm-', 'mx-', 'my-', 'mt-', 'mr-', 'mb-', 'ml-',
+      'w-', 'h-', 'bg-', 'text-', 'border-', 'rounded',
+      'flex', 'grid', 'block', 'inline', 'hidden',
+      'absolute', 'relative', 'fixed', 'sticky',
+      'top-', 'right-', 'bottom-', 'left-',
+      'z-', 'opacity-', 'transform', 'transition',
+      'duration-', 'ease-', 'delay-',
+      'gap-', 'space-x-', 'space-y-',
+      'shadow', 'cursor-', 'select-', 'pointer-events-',
+      'overflow-', 'font-', 'leading-', 'tracking-',
+      'items-', 'justify-', 'content-',
+      'backdrop-blur'
+    ];
+
+    // 检查基础类是否匹配Tailwind前缀
+    const matchesPrefix = tailwindPrefixes.some(prefix => actualClass.startsWith(prefix));
+
+    // 检查是否为任意值类（包含方括号）
+    const isArbitraryValue = /\[([^\]]+)\]/.test(actualClass);
+
+    // 检查是否为纯色类名
+    const isColorClass = /^(white|black|gray|red|blue|green|yellow|purple|pink|indigo)(-\d+)?$/.test(actualClass);
+
+    // 检查是否为常见的独立类
+    const standaloneClasses = [
+      'flex', 'grid', 'block', 'inline', 'hidden', 'visible',
+      'absolute', 'relative', 'fixed', 'sticky', 'static',
+      'transform', 'transition', 'uppercase', 'lowercase', 'capitalize',
+      'truncate', 'break-words', 'break-all'
+    ];
+    const isStandaloneClass = standaloneClasses.includes(actualClass);
+
+    const result = matchesPrefix || isArbitraryValue || isColorClass || isStandaloneClass;
+
+    // 调试特定类名
+    if (originalClass.includes('hover:bg-[#383838]') || originalClass.includes('bg-[#383838]') || originalClass === 'hover:bg-[#383838]') {
+      this.logger.info(`[DEBUG] Tailwind class check: "${originalClass}" -> "${actualClass}" -> ${result} (prefix:${matchesPrefix}, arbitrary:${isArbitraryValue}, color:${isColorClass}, standalone:${isStandaloneClass})`);
+    }
+
+    return result;
+  }
+
+  /**
+   * 扫描现有内容中的Tailwind类并预先生成
    */
   scanExistingArbitraryClasses() {
     if (!this.uiRoot) return;
 
-    this.logger.debug('Scanning existing arbitrary classes in Shadow DOM');
+    this.logger.debug('Scanning existing Tailwind classes in Shadow DOM');
 
-    const arbitraryClasses = new Set();
+    const tailwindClasses = new Set();
 
     // 扫描Shadow DOM中已有的所有元素，包括根元素本身
     const allElements = this.uiRoot.querySelectorAll('*');
@@ -654,29 +750,38 @@ window.WVE.UIManager = class UIManager {
       // 扫描元素的class属性
       if (element.className) {
         const className = typeof element.className === 'string' ? element.className : element.className.toString();
-        const arbitraryValueRegex = /\b[\w-]+\[([^\]]+)\]/g;
-        const matches = className.match(arbitraryValueRegex) || [];
-        matches.forEach(cls => arbitraryClasses.add(cls));
+        const tailwindClassRegex = /\b[\w.:-]+(?:\[([^\]]+)\])?/g;
+        const matches = className.match(tailwindClassRegex) || [];
+        matches.forEach(cls => {
+          if (this.isTailwindClass(cls)) {
+            tailwindClasses.add(cls);
+          }
+        });
       }
 
-      // 扫描元素的innerHTML中的任意值类（用于动态生成的HTML）
+      // 扫描元素的innerHTML中的Tailwind类（用于动态生成的HTML）
       if (element.innerHTML) {
-        const arbitraryValueRegex = /\bclass\s*=\s*["'][^"']*[\w-]+\[([^\]]+)\][^"']*["']/g;
+        const htmlClassRegex = /\bclass\s*=\s*["']([^"']*)["']/g;
         let match;
-        while ((match = arbitraryValueRegex.exec(element.innerHTML)) !== null) {
-          const classAttr = match[0];
-          const arbitraryMatches = classAttr.match(/\b[\w-]+\[([^\]]+)\]/g) || [];
-          arbitraryMatches.forEach(cls => arbitraryClasses.add(cls));
+        while ((match = htmlClassRegex.exec(element.innerHTML)) !== null) {
+          const classAttr = match[1];
+          const tailwindClassRegex = /\b[\w.:-]+(?:\[([^\]]+)\])?/g;
+          const classMatches = classAttr.match(tailwindClassRegex) || [];
+          classMatches.forEach(cls => {
+            if (this.isTailwindClass(cls)) {
+              tailwindClasses.add(cls);
+            }
+          });
         }
       }
     });
 
-    if (arbitraryClasses.size > 0) {
-      const classesToGenerate = Array.from(arbitraryClasses).join(' ');
-      this.logger.info('Pre-generating arbitrary classes found in Shadow DOM:', Array.from(arbitraryClasses));
+    if (tailwindClasses.size > 0) {
+      const classesToGenerate = Array.from(tailwindClasses).join(' ');
+      this.logger.info('Pre-generating Tailwind classes found in Shadow DOM:', Array.from(tailwindClasses));
       this.detectAndGenerateArbitraryValues(classesToGenerate);
     } else {
-      this.logger.debug('No arbitrary classes found in existing Shadow DOM content');
+      this.logger.debug('No Tailwind classes found in existing Shadow DOM content');
     }
   }
 

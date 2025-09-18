@@ -140,7 +140,7 @@ window.WVE.PropertyPanel = class PropertyPanel {
       .panel-header {
         position: sticky;
         top: 0;
-        background: #383838;
+        background: #272727;
         padding: 12px;
         border-bottom: 1px solid #404040;
         z-index: 1;
