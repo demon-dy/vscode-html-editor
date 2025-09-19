@@ -14,6 +14,9 @@ window.WVE.NoneLayoutSection = class NoneLayoutSection extends window.WVE.Proper
 
     this.currentElement = null;
     this.controls = {};
+
+    // 初始化 LayoutAdapter
+    this.layoutAdapter = new window.WVE.LayoutAdapter();
   }
 
   createContentElements(container) {
@@ -230,9 +233,21 @@ window.WVE.NoneLayoutSection = class NoneLayoutSection extends window.WVE.Proper
    * 设置显示模式
    */
   setDisplayMode(mode) {
-    if (!this.currentElement) return;
+    if (!this.currentElement) {
+      return;
+    }
 
-    this.currentElement.style.display = mode;
+    // 移除现有的 display 类名
+    const displayClasses = ['block', 'inline', 'inline-block', 'hidden'];
+    displayClasses.forEach(cls => {
+      this.currentElement.classList.remove(cls);
+    });
+
+    // 应用新的 display 类名
+    if (mode && mode !== 'initial') {
+      this.layoutAdapter.applyClasses(this.currentElement, [mode]);
+    }
+
     this.notifyChange('display', mode);
   }
 
@@ -240,27 +255,19 @@ window.WVE.NoneLayoutSection = class NoneLayoutSection extends window.WVE.Proper
    * 更新间距
    */
   updateSpacing(type, axis, value) {
-    if (!this.currentElement) return;
+    if (!this.currentElement) {
+      return;
+    }
 
     const numValue = parseInt(value) || 0;
-    const unit = 'px';
 
-    if (type === 'margin') {
-      if (axis === 'x') {
-        this.currentElement.style.marginLeft = numValue + unit;
-        this.currentElement.style.marginRight = numValue + unit;
-      } else {
-        this.currentElement.style.marginTop = numValue + unit;
-        this.currentElement.style.marginBottom = numValue + unit;
-      }
-    } else if (type === 'padding') {
-      if (axis === 'x') {
-        this.currentElement.style.paddingLeft = numValue + unit;
-        this.currentElement.style.paddingRight = numValue + unit;
-      } else {
-        this.currentElement.style.paddingTop = numValue + unit;
-        this.currentElement.style.paddingBottom = numValue + unit;
-      }
+    // 移除旧的间距类名
+    this.removeSpacingClasses(type, axis);
+
+    // 应用新的 Tailwind 间距类名
+    if (numValue > 0) {
+      const tailwindClasses = this.getTailwindSpacingClasses(type, axis, numValue);
+      this.layoutAdapter.applyClasses(this.currentElement, tailwindClasses);
     }
 
     // 如果链接是激活的，同步另一个轴
@@ -273,6 +280,45 @@ window.WVE.NoneLayoutSection = class NoneLayoutSection extends window.WVE.Proper
     }
 
     this.notifyChange(type, { axis, value: numValue });
+  }
+
+  /**
+   * 获取 Tailwind 间距类名
+   */
+  getTailwindSpacingClasses(type, axis, value) {
+    const prefix = type === 'margin' ? 'm' : 'p';
+    const suffix = axis === 'x' ? 'x' : 'y';
+
+    // 将像素值转换为 Tailwind 间距单位 (假设 1 单位 = 4px)
+    const tailwindValue = Math.round(value / 4);
+
+    // 如果值太大，使用任意值语法
+    if (tailwindValue > 96) {
+      return [`${prefix}${suffix}-[${value}px]`];
+    }
+
+    return [`${prefix}${suffix}-${tailwindValue}`];
+  }
+
+  /**
+   * 移除旧的间距类名
+   */
+  removeSpacingClasses(type, axis) {
+    const prefix = type === 'margin' ? 'm' : 'p';
+    const suffix = axis === 'x' ? 'x' : 'y';
+
+    // 移除标准间距类名 (0-96)
+    for (let i = 0; i <= 96; i++) {
+      this.currentElement.classList.remove(`${prefix}${suffix}-${i}`);
+    }
+
+    // 移除任意值类名（这个需要特殊处理）
+    const classList = Array.from(this.currentElement.classList);
+    classList.forEach(cls => {
+      if (cls.startsWith(`${prefix}${suffix}-[`) && cls.endsWith('px]')) {
+        this.currentElement.classList.remove(cls);
+      }
+    });
   }
 
   /**
@@ -304,9 +350,21 @@ window.WVE.NoneLayoutSection = class NoneLayoutSection extends window.WVE.Proper
    * 设置文本对齐
    */
   setTextAlign(align) {
-    if (!this.currentElement) return;
+    if (!this.currentElement) {
+      return;
+    }
 
-    this.currentElement.style.textAlign = align;
+    // 移除现有的文本对齐类名
+    const alignClasses = ['text-left', 'text-center', 'text-right', 'text-justify'];
+    alignClasses.forEach(cls => {
+      this.currentElement.classList.remove(cls);
+    });
+
+    // 应用新的文本对齐类名
+    if (align && align !== 'initial') {
+      const tailwindClass = `text-${align}`;
+      this.layoutAdapter.applyClasses(this.currentElement, [tailwindClass]);
+    }
 
     // 更新按钮状态
     const buttons = this.controls.alignGroup.querySelectorAll('button');
@@ -325,7 +383,9 @@ window.WVE.NoneLayoutSection = class NoneLayoutSection extends window.WVE.Proper
    * 从元素获取当前值并更新控件
    */
   updateFromElement(element) {
-    if (!element) return;
+    if (!element) {
+      return;
+    }
 
     const style = window.getComputedStyle(element);
 
@@ -333,7 +393,7 @@ window.WVE.NoneLayoutSection = class NoneLayoutSection extends window.WVE.Proper
     this.updateDisplayMode(style.display);
 
     // 更新间距值
-    this.updateSpacingValues(element, style);
+    this.updateSpacingValues(style);
 
     // 更新文本对齐
     this.updateTextAlign(style.textAlign);
@@ -346,7 +406,7 @@ window.WVE.NoneLayoutSection = class NoneLayoutSection extends window.WVE.Proper
     });
   }
 
-  updateSpacingValues(element, style) {
+  updateSpacingValues(style) {
     // 更新外边距
     this.updateSpacingControl('margin', {
       x: parseInt(style.marginLeft) || 0,
@@ -407,7 +467,9 @@ window.WVE.NoneLayoutSection = class NoneLayoutSection extends window.WVE.Proper
   }
 
   injectStyles() {
-    if (document.getElementById('none-layout-styles')) return;
+    if (document.getElementById('none-layout-styles')) {
+      return;
+    }
 
     const style = document.createElement('style');
     style.id = 'none-layout-styles';

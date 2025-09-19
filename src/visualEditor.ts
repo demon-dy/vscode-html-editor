@@ -111,7 +111,13 @@ export class VisualEditorProvider implements vscode.CustomTextEditorProvider {
       if (event.webviewPanel.visible) { this.activeCode = code; }
     });
     // Initialize WebView
-    panel.webview.options = { enableScripts: true };
+    panel.webview.options = {
+      enableScripts: true,
+      localResourceRoots: [
+        vscode.Uri.file(path.join(this.context.extensionPath, 'webview')),
+        vscode.Uri.file(path.dirname(code.uri.fsPath))
+      ]
+    };
     panel.onDidDispose(() => {
       this.codes.get(code)?.delete(panel);
       this.editedBy.delete(panel);
@@ -551,28 +557,6 @@ export class VisualEditorProvider implements vscode.CustomTextEditorProvider {
       { path: 'webview.js', description: '入口文件', required: true }
     ];
 
-    // 配置 Tailwind CDN - 简化配置避免HTML序列化问题
-    try {
-      const configScript = document.createElement('script');
-      configScript.textContent = [
-        '// Tailwind configuration',
-        'window.tailwind = window.tailwind || {};',
-        'window.tailwind.config = {',
-        '  safelist: [',
-        '    "flex", "flex-col", "grid", "items-center", "justify-center",',
-        '    "fixed", "absolute", "relative", "z-10", "z-20", "z-50",',
-        '    "w-full", "h-full", "p-1", "p-2", "p-4", "m-1", "m-2", "m-4",',
-        '    "rounded", "border", "bg-white", "bg-gray-100", "bg-blue-500",',
-        '    "text-white", "text-gray-600", "text-sm", "font-medium",',
-        '    "cursor-pointer", "select-none", "shadow", "transition"',
-        '  ],',
-        '  content: [{ raw: "", extension: "html" }]',
-        '};',
-        'if (window.tailwind) window.tailwind.scanShadowRoots = true;'
-      ].join('\n');
-      document.head.appendChild(configScript);
-    } catch { /* ignore */ }
-
     // 加载所有必需的脚本
     scriptConfigs
       .filter(config => config.required)
@@ -582,6 +566,65 @@ export class VisualEditorProvider implements vscode.CustomTextEditorProvider {
 
     // 加载可选功能脚本（为将来扩展预留）
     this.loadOptionalFeatures(webview, document, scriptConfigs.length);
+
+    // 在所有脚本加载后添加 Tailwind 相关配置
+    this.addTailwindConfiguration(document);
+  }
+
+  /**
+   * 添加 Tailwind 相关脚本（警告抑制等）
+   */
+  private addTailwindConfiguration(document: any) {
+    // 禁用 Tailwind CDN 生产环境警告
+    const silenceScript = document.createElement('script');
+    silenceScript.textContent = [
+      '// 临时屏蔽 Tailwind CDN 生产环境警告',
+      '(function() {',
+      '  const originalWarn = console.warn;',
+      '  console.warn = function(...args) {',
+      '    const message = args.join(" ");',
+      '    if (message.includes("cdn.tailwindcss.com should not be used in production")) {',
+      '      return; // 忽略此警告',
+      '    }',
+      '    originalWarn.apply(console, args);',
+      '  };',
+      '})();'
+    ].join('\n');
+    document.head.appendChild(silenceScript);
+  }
+
+  /**
+   * 配置 Tailwind（在脚本加载完成后调用）
+   */
+  private configureTailwind(document: any) {
+    const configScript = document.createElement('script');
+    configScript.textContent = [
+      '// Tailwind configuration - executed after script loads',
+      '(function() {',
+      '  if (typeof window.tailwind !== "undefined") {',
+      '    try {',
+      '      window.tailwind.config = {',
+      '        safelist: [',
+      '          "flex", "flex-col", "grid", "items-center", "justify-center",',
+      '          "fixed", "absolute", "relative", "z-10", "z-20", "z-50",',
+      '          "w-full", "h-full", "p-1", "p-2", "p-4", "m-1", "m-2", "m-4",',
+      '          "rounded", "border", "bg-white", "bg-gray-100", "bg-blue-500",',
+      '          "text-white", "text-gray-600", "text-sm", "font-medium",',
+      '          "cursor-pointer", "select-none", "shadow", "transition"',
+      '        ],',
+      '        content: [{ raw: "", extension: "html" }]',
+      '      };',
+      '      window.tailwind.scanShadowRoots = true;',
+      '      console.log("Tailwind CDN 配置成功");',
+      '    } catch (error) {',
+      '      console.warn("Tailwind 配置失败:", error);',
+      '    }',
+      '  } else {',
+      '    console.error("Tailwind 对象仍然未定义");',
+      '  }',
+      '})();'
+    ].join('\n');
+    document.head.appendChild(configScript);
   }
 
   /**
@@ -600,6 +643,20 @@ export class VisualEditorProvider implements vscode.CustomTextEditorProvider {
     // 为调试添加标识
     script.setAttribute('data-wve-script', `${order}-${config.path.split('/').pop()}`);
     script.setAttribute('data-wve-description', config.description);
+
+    // 如果是 Tailwind 脚本，添加加载完成后的配置
+    if (config.path.includes('tailwind')) {
+      script.onload = () => {
+        console.log('Tailwind 脚本加载完成，开始配置');
+        // 延迟一点确保脚本完全初始化
+        setTimeout(() => {
+          this.configureTailwind(document);
+        }, 100);
+      };
+      script.onerror = () => {
+        console.error('Tailwind 脚本加载失败');
+      };
+    }
 
     document.head.appendChild(script);
   }
@@ -634,12 +691,6 @@ export class VisualEditorProvider implements vscode.CustomTextEditorProvider {
 
           // 主面板管理器（必须最后加载）
           { path: 'modules/ui/property-panel/PropertyPanel.js', description: '新属性面板主类' },
-
-          // 保留原有区域用于兼容性（如果需要）
-          { path: 'modules/ui/property-panel/PositionSection.js', description: 'Position 属性区域（兼容）' },
-          { path: 'modules/ui/property-panel/AutoLayoutSection.js', description: 'Auto Layout 属性区域（兼容）' },
-          { path: 'modules/ui/property-panel/AppearanceSection.js', description: 'Appearance 属性区域（兼容）' },
-          { path: 'modules/ui/property-panel/EffectsSection.js', description: 'Effects 属性区域（兼容）' }
         ]
       },
       dragDrop: {

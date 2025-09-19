@@ -34,12 +34,15 @@ window.WVE.MouseHandler = class MouseHandler {
     const panel = uiRoot?.querySelector('#wve-style-toolbar') || uiRoot?.querySelector('#wve-element-panel');
     const propertyPanel = uiRoot?.querySelector('#wve-property-panel');
 
-    if (
+    // 检查是否点击在UI元素上
+    const clickedOnUI = (
       (toolbar && (toolbar.contains(event.target) || path.includes(toolbar))) ||
       (panel && (panel.contains(event.target) || path.includes(panel))) ||
       (propertyPanel && (propertyPanel.contains(event.target) || path.includes(propertyPanel)))
-    ) {
-      this.logger.debug('Mouse down on UI elements, ignoring');
+    );
+
+    if (clickedOnUI) {
+      this.logger.debug('Mouse down on UI elements, preserving selection and ignoring');
       return;
     }
 
@@ -83,7 +86,9 @@ window.WVE.MouseHandler = class MouseHandler {
         selector.style.display = 'block';
       }
 
-      if (!this.stateManager.keyboard.Control) {
+      // 只有在点击文档内容区域且不按住 Ctrl 时才清空选择
+      // 避免因点击属性面板导致的意外清除
+      if (!this.stateManager.keyboard.Control && !clickedOnUI) {
         this.selectionManager.clearSelection();
       }
     }
@@ -102,7 +107,9 @@ window.WVE.MouseHandler = class MouseHandler {
    * 处理鼠标移动事件
    */
   onMouseMove = (event) => {
-    if (!this.stateManager.editMode) return;
+    if (!this.stateManager.editMode) {
+      return;
+    }
 
     const pos = window.WVE.DOMUtils.realPositionOf(event, this.stateManager.zoom);
 
@@ -128,7 +135,9 @@ window.WVE.MouseHandler = class MouseHandler {
    * 处理鼠标释放事件
    */
   onMouseUp = (event) => {
-    if (!this.stateManager.editMode) return;
+    if (!this.stateManager.editMode) {
+      return;
+    }
 
     this.logger.debug('Mouse up event');
 
@@ -200,7 +209,9 @@ window.WVE.MouseHandler = class MouseHandler {
    * 处理移动操作
    */
   handleMoving(dx, dy, pos) {
-    if (!this.movableManager) return;
+    if (!this.movableManager) {
+      return;
+    }
 
     const mouse = this.stateManager.mouse;
 
@@ -223,14 +234,18 @@ window.WVE.MouseHandler = class MouseHandler {
    * 绘制选择框
    */
   drawSelector = () => {
-    if (this.stateManager.operation !== 'selecting') return;
+    if (this.stateManager.operation !== 'selecting') {
+      return;
+    }
 
     requestAnimationFrame(this.drawSelector);
 
     const mouse = this.stateManager.mouse;
     const selector = this.uiManager.getSelector();
 
-    if (!selector) return;
+    if (!selector) {
+      return;
+    }
 
     const width = Math.abs(mouse.current.pageX - mouse.start.pageX);
     const height = Math.abs(mouse.current.pageY - mouse.start.pageY);
