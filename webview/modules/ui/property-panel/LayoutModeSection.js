@@ -19,25 +19,25 @@ window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.Proper
     this.modes = {
       none: {
         name: '无布局',
-        icon: '📄',
+        icon: 'file-text',
         description: '默认文档流，适用于简单文本和基础布局',
         cssClass: 'mode-none'
       },
       absolute: {
         name: '绝对布局',
-        icon: '📌',
+        icon: 'move',
         description: '精确定位，适用于覆盖层和特殊位置需求',
         cssClass: 'mode-absolute'
       },
       flex: {
         name: '响应式布局',
-        icon: '↔️',
+        icon: 'split-square-horizontal',
         description: '现代响应式设计 (Flexbox)',
         cssClass: 'mode-flex'
       },
       grid: {
         name: '网格布局',
-        icon: '⊞',
+        icon: 'grid-3x3',
         description: '复杂的二维布局 (Grid)',
         cssClass: 'mode-grid'
       }
@@ -57,15 +57,18 @@ window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.Proper
 
     // 应用样式
     this.injectStyles();
+
+    // 初始化 Lucide 图标，传入容器（延迟执行确保DOM完全构建）
+    setTimeout(() => this.initializeLucideIcons(container), 0);
   }
 
   createModeSelector(container) {
     const selectorContainer = document.createElement('div');
     selectorContainer.className = 'mode-selector-container';
 
-    // 创建4个模式按钮
+    // 创建4个模式按钮 - 使用 Tailwind 类
     const modesContainer = document.createElement('div');
-    modesContainer.className = 'mode-buttons-container';
+    modesContainer.className = 'flex bg-[#2c2c2c] rounded gap-1 p-1 border border-[#3d3d3d]';
 
     Object.entries(this.modes).forEach(([key, mode]) => {
       const button = this.createModeButton(key, mode);
@@ -78,21 +81,16 @@ window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.Proper
 
   createModeButton(modeKey, mode) {
     const button = document.createElement('div');
-    button.className = `mode-button ${mode.cssClass}`;
+    button.className = 'flex items-center justify-center w-8 h-8 rounded text-gray-400 hover:text-white hover:bg-[#3d3d3d] transition-all duration-200 cursor-pointer';
     button.dataset.mode = modeKey;
+    button.title = mode.name;
 
-    // 图标
-    const icon = document.createElement('div');
-    icon.className = 'mode-icon';
-    icon.textContent = mode.icon;
-
-    // 标题
-    const title = document.createElement('div');
-    title.className = 'mode-title';
-    title.textContent = mode.name;
+    // 图标 - 使用 Lucide 图标
+    const icon = document.createElement('i');
+    icon.className = 'w-4 h-4';
+    icon.setAttribute('data-lucide', mode.icon);
 
     button.appendChild(icon);
-    button.appendChild(title);
 
     // 点击事件
     button.addEventListener('click', () => {
@@ -116,7 +114,9 @@ window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.Proper
   }
 
   updateModeDescription() {
-    if (!this.currentModeDesc) return;
+    if (!this.currentModeDesc) {
+      return;
+    }
 
     const mode = this.modes[this.currentMode];
     if (mode) {
@@ -131,7 +131,9 @@ window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.Proper
    * 选择布局模式
    */
   selectMode(modeKey) {
-    if (this.currentMode === modeKey) return;
+    if (this.currentMode === modeKey) {
+      return;
+    }
 
     const prevMode = this.currentMode;
     this.currentMode = modeKey;
@@ -155,12 +157,14 @@ window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.Proper
   }
 
   updateModeButtons() {
-    const buttons = this.element.querySelectorAll('.mode-button');
+    const buttons = this.element.querySelectorAll('[data-mode]');
     buttons.forEach(button => {
       if (button.dataset.mode === this.currentMode) {
-        button.classList.add('active');
+        // 激活状态 - 使用白色背景，黑色图标
+        button.className = 'flex items-center justify-center w-8 h-8 rounded bg-white text-black cursor-pointer';
       } else {
-        button.classList.remove('active');
+        // 非激活状态
+        button.className = 'flex items-center justify-center w-8 h-8 rounded text-gray-400 hover:text-white hover:bg-[#3d3d3d] transition-all duration-200 cursor-pointer';
       }
     });
   }
@@ -169,10 +173,11 @@ window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.Proper
    * 将布局模式应用到元素
    */
   applyModeToElement(newMode, prevMode) {
-    if (!this.currentElement) return;
+    if (!this.currentElement) {
+      return;
+    }
 
     const element = this.currentElement;
-    const style = element.style;
 
     // 清除前一个模式的样式
     this.clearModeStyles(element, prevMode);
@@ -274,7 +279,9 @@ window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.Proper
    * 从元素检测当前布局模式
    */
   detectModeFromElement(element) {
-    if (!element) return 'none';
+    if (!element) {
+      return 'none';
+    }
 
     const style = window.getComputedStyle(element);
 
@@ -361,8 +368,28 @@ window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.Proper
     }
   }
 
+  /**
+   * 初始化 Lucide 图标
+   */
+  initializeLucideIcons(container) {
+    // 确保 LucideIcons 可用
+    if (typeof window.WVE !== 'undefined' && window.WVE.LucideIcons) {
+      // 使用传入的容器或者this.element查找Lucide图标
+      const targetElement = container || this.element;
+      if (targetElement) {
+        // 使用 replaceInRoot 方法来初始化图标
+        window.WVE.LucideIcons.replaceInRoot(targetElement);
+      }
+    } else {
+      // 如果 LucideIcons 还未加载，延迟初始化
+      setTimeout(() => this.initializeLucideIcons(container), 100);
+    }
+  }
+
   injectStyles() {
-    if (document.getElementById('layout-mode-styles')) return;
+    if (document.getElementById('layout-mode-styles')) {
+      return;
+    }
 
     const style = document.createElement('style');
     style.id = 'layout-mode-styles';
@@ -373,67 +400,6 @@ window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.Proper
 
       .mode-selector-container {
         margin-bottom: 12px;
-      }
-
-      .mode-buttons-container {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 8px;
-      }
-
-      .mode-button {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        padding: 12px 8px;
-        background: #363636;
-        border: 1px solid #404040;
-        border-radius: 6px;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        min-height: 64px;
-        justify-content: center;
-      }
-
-      .mode-button:hover {
-        background: #404040;
-        border-color: #505050;
-      }
-
-      .mode-button.active {
-        background: #0078d4;
-        border-color: #106ebe;
-        color: #ffffff;
-      }
-
-      .mode-button.active::after {
-        content: '';
-        position: absolute;
-        bottom: -2px;
-        left: 50%;
-        transform: translateX(-50%);
-        width: 6px;
-        height: 6px;
-        background: #0078d4;
-        border-radius: 50%;
-      }
-
-      .mode-icon {
-        font-size: 18px;
-        margin-bottom: 4px;
-        line-height: 1;
-      }
-
-      .mode-title {
-        font-size: 10px;
-        font-weight: 500;
-        text-align: center;
-        line-height: 1.2;
-        color: #cccccc;
-      }
-
-      .mode-button.active .mode-title {
-        color: #ffffff;
       }
 
       .mode-description-container {
@@ -453,46 +419,6 @@ window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.Proper
         font-size: 11px;
         color: #cccccc;
         line-height: 1.3;
-      }
-
-      /* 智能提示样式 */
-      .mode-suggestion {
-        background: #2d4f3e;
-        border: 1px solid #4a7c59;
-        border-radius: 4px;
-        padding: 8px;
-        margin-top: 8px;
-        font-size: 11px;
-      }
-
-      .mode-suggestion-icon {
-        color: #4ade80;
-        margin-right: 4px;
-      }
-
-      .mode-suggestion-text {
-        color: #cccccc;
-        line-height: 1.3;
-      }
-
-      .mode-suggestion-actions {
-        margin-top: 6px;
-        display: flex;
-        gap: 6px;
-      }
-
-      .mode-suggestion-btn {
-        background: #4a7c59;
-        border: none;
-        border-radius: 3px;
-        color: #ffffff;
-        font-size: 10px;
-        padding: 4px 8px;
-        cursor: pointer;
-      }
-
-      .mode-suggestion-btn:hover {
-        background: #5a8c69;
       }
     `;
 

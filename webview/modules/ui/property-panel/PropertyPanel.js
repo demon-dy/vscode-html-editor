@@ -339,29 +339,56 @@ window.WVE.PropertyPanel = class PropertyPanel {
   createLayoutSections() {
     this.logger.info('PropertyPanel: createLayoutSections called');
 
+    // 检查布局 Section 类是否可用
+    this.logger.info('PropertyPanel: Checking layout section classes availability');
+    this.logger.info('PropertyPanel: NoneLayoutSection available:', !!window.WVE.NoneLayoutSection);
+    this.logger.info('PropertyPanel: AbsoluteLayoutSection available:', !!window.WVE.AbsoluteLayoutSection);
+    this.logger.info('PropertyPanel: FlexLayoutSection available:', !!window.WVE.FlexLayoutSection);
+    this.logger.info('PropertyPanel: GridLayoutSection available:', !!window.WVE.GridLayoutSection);
+
     // 无布局模式
     this.logger.info('PropertyPanel: Creating none layout section');
-    this.layoutSections.none = new window.WVE.NoneLayoutSection({
-      uiManager: this.uiManager
-    });
+    try {
+      this.layoutSections.none = new window.WVE.NoneLayoutSection({
+        uiManager: this.uiManager
+      });
+      this.logger.info('PropertyPanel: NoneLayoutSection created successfully');
+    } catch (error) {
+      this.logger.error('PropertyPanel: Failed to create NoneLayoutSection:', error);
+    }
 
     // 绝对布局模式
     this.logger.info('PropertyPanel: Creating absolute layout section');
-    this.layoutSections.absolute = new window.WVE.AbsoluteLayoutSection({
-      uiManager: this.uiManager
-    });
+    try {
+      this.layoutSections.absolute = new window.WVE.AbsoluteLayoutSection({
+        uiManager: this.uiManager
+      });
+      this.logger.info('PropertyPanel: AbsoluteLayoutSection created successfully');
+    } catch (error) {
+      this.logger.error('PropertyPanel: Failed to create AbsoluteLayoutSection:', error);
+    }
 
     // 响应式布局模式 (Flexbox)
     this.logger.info('PropertyPanel: Creating flex layout section');
-    this.layoutSections.flex = new window.WVE.FlexLayoutSection({
-      uiManager: this.uiManager
-    });
+    try {
+      this.layoutSections.flex = new window.WVE.FlexLayoutSection({
+        uiManager: this.uiManager
+      });
+      this.logger.info('PropertyPanel: FlexLayoutSection created successfully');
+    } catch (error) {
+      this.logger.error('PropertyPanel: Failed to create FlexLayoutSection:', error);
+    }
 
     // 网格布局模式
     this.logger.info('PropertyPanel: Creating grid layout section');
-    this.layoutSections.grid = new window.WVE.GridLayoutSection({
-      uiManager: this.uiManager
-    });
+    try {
+      this.layoutSections.grid = new window.WVE.GridLayoutSection({
+        uiManager: this.uiManager
+      });
+      this.logger.info('PropertyPanel: GridLayoutSection created successfully');
+    } catch (error) {
+      this.logger.error('PropertyPanel: Failed to create GridLayoutSection:', error);
+    }
 
     // 将所有区域元素添加到动态区域中，但默认隐藏
     this.logger.info('PropertyPanel: Adding layout section elements to dynamic area');
