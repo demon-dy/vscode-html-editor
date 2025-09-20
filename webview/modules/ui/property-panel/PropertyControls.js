@@ -401,15 +401,15 @@ window.WVE.PropertyControls = {
     wrapper.appendChild(colorChip);
     wrapper.appendChild(input);
 
-    // 点击颜色块打开颜色选择面板（简化版）
+    // 点击颜色块打开颜色选择面板
     colorChip.addEventListener('click', () => {
-      // 这里可以后续扩展为完整的颜色选择面板
-      const color = prompt('请输入颜色值:', value);
-      if (color) {
-        colorChip.style.background = color;
-        input.value = color;
-        if (onChange) onChange(color);
-      }
+      this.showColorPicker(value, (color) => {
+        if (color) {
+          colorChip.style.background = color;
+          input.value = color;
+          if (onChange) onChange(color);
+        }
+      });
     });
 
     return wrapper;
@@ -570,5 +570,259 @@ window.WVE.PropertyControls = {
     wrapper.appendChild(rightControl);
 
     return wrapper;
+  },
+
+  /**
+   * 显示颜色选择器
+   */
+  showColorPicker(currentColor, callback) {
+    // 查找属性面板容器
+    const propertyPanel = document.querySelector('.property-panel');
+    const targetContainer = propertyPanel || document.body;
+
+    // 创建模态背景
+    const modal = document.createElement('div');
+    modal.className = 'color-picker-modal';
+    modal.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 99999;
+    `;
+
+    // 阻止事件冒泡和默认行为
+    modal.addEventListener('mousedown', (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+    });
+    modal.addEventListener('click', (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+    });
+    modal.addEventListener('mousemove', (e) => {
+      e.stopPropagation();
+    });
+
+    // 创建颜色选择器面板
+    const panel = document.createElement('div');
+    panel.className = 'color-picker-panel';
+    panel.style.cssText = `
+      background: #2a2a2a;
+      border: 1px solid #444;
+      border-radius: 8px;
+      padding: 16px;
+      min-width: 280px;
+      max-width: 320px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+      position: relative;
+    `;
+
+    // 阻止面板内的事件冒泡
+    panel.addEventListener('mousedown', (e) => {
+      e.stopPropagation();
+    });
+    panel.addEventListener('click', (e) => {
+      e.stopPropagation();
+    });
+    panel.addEventListener('mousemove', (e) => {
+      e.stopPropagation();
+    });
+
+    // 标题
+    const title = document.createElement('div');
+    title.textContent = '选择颜色';
+    title.style.cssText = `
+      color: #fff;
+      font-size: 14px;
+      margin-bottom: 16px;
+      text-align: center;
+    `;
+
+    // 颜色输入框
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = currentColor || '#000000';
+    input.style.cssText = `
+      width: 100%;
+      padding: 8px;
+      border: 1px solid #555;
+      border-radius: 4px;
+      background: #1a1a1a;
+      color: #fff;
+      font-size: 12px;
+      margin-bottom: 16px;
+    `;
+
+    // 预设颜色
+    const presetColors = [
+      '#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#FF00FF', '#00FFFF',
+      '#800000', '#008000', '#000080', '#808000', '#800080', '#008080',
+      '#C0C0C0', '#808080', '#000000', '#FFFFFF', '#FFA500', '#A52A2A'
+    ];
+
+    const colorGrid = document.createElement('div');
+    colorGrid.style.cssText = `
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 4px;
+      margin-bottom: 16px;
+    `;
+
+    presetColors.forEach(color => {
+      const colorBtn = document.createElement('div');
+      colorBtn.style.cssText = `
+        width: 30px;
+        height: 30px;
+        background: ${color};
+        border: 2px solid #555;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: transform 0.1s;
+      `;
+
+      colorBtn.addEventListener('click', () => {
+        input.value = color;
+        // 更新预览
+        previewChip.style.background = color;
+      });
+
+      colorBtn.addEventListener('mouseenter', () => {
+        colorBtn.style.transform = 'scale(1.1)';
+      });
+
+      colorBtn.addEventListener('mouseleave', () => {
+        colorBtn.style.transform = 'scale(1)';
+      });
+
+      colorGrid.appendChild(colorBtn);
+    });
+
+    // 颜色预览
+    const previewWrapper = document.createElement('div');
+    previewWrapper.style.cssText = `
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 16px;
+    `;
+
+    const previewLabel = document.createElement('span');
+    previewLabel.textContent = '预览:';
+    previewLabel.style.cssText = `
+      color: #ccc;
+      font-size: 12px;
+    `;
+
+    const previewChip = document.createElement('div');
+    previewChip.style.cssText = `
+      width: 40px;
+      height: 20px;
+      background: ${currentColor || '#000000'};
+      border: 1px solid #555;
+      border-radius: 4px;
+    `;
+
+    previewWrapper.appendChild(previewLabel);
+    previewWrapper.appendChild(previewChip);
+
+    // 输入框变化时更新预览
+    input.addEventListener('input', () => {
+      const color = input.value;
+      if (/^#[0-9A-Fa-f]{6}$/.test(color) || /^#[0-9A-Fa-f]{3}$/.test(color)) {
+        previewChip.style.background = color;
+      }
+    });
+
+    // 按钮区域
+    const buttonArea = document.createElement('div');
+    buttonArea.style.cssText = `
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+    `;
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.textContent = '取消';
+    cancelBtn.style.cssText = `
+      padding: 6px 16px;
+      border: 1px solid #555;
+      border-radius: 4px;
+      background: #333;
+      color: #ccc;
+      cursor: pointer;
+      font-size: 12px;
+    `;
+
+    const confirmBtn = document.createElement('button');
+    confirmBtn.textContent = '确定';
+    confirmBtn.style.cssText = `
+      padding: 6px 16px;
+      border: 1px solid #007acc;
+      border-radius: 4px;
+      background: #007acc;
+      color: white;
+      cursor: pointer;
+      font-size: 12px;
+    `;
+
+    // 事件处理
+    cancelBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      targetContainer.removeChild(modal);
+    });
+
+    confirmBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const color = input.value.trim();
+      if (color) {
+        callback(color);
+      }
+      targetContainer.removeChild(modal);
+    });
+
+    // 点击背景关闭
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) {
+        e.stopPropagation();
+        e.preventDefault();
+        targetContainer.removeChild(modal);
+      }
+    });
+
+    // ESC键关闭
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        e.preventDefault();
+        targetContainer.removeChild(modal);
+        document.removeEventListener('keydown', handleKeyDown);
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+
+    // 组装界面
+    buttonArea.appendChild(cancelBtn);
+    buttonArea.appendChild(confirmBtn);
+
+    panel.appendChild(title);
+    panel.appendChild(input);
+    panel.appendChild(colorGrid);
+    panel.appendChild(previewWrapper);
+    panel.appendChild(buttonArea);
+
+    modal.appendChild(panel);
+    targetContainer.appendChild(modal);
+
+    // 聚焦输入框
+    setTimeout(() => {
+      input.focus();
+      input.select();
+    }, 100);
   }
 };

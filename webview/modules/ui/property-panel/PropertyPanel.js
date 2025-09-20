@@ -666,8 +666,8 @@ window.WVE.PropertyPanel = class PropertyPanel {
       }
       if (hasSelection) {
         hasSelection.style.display = 'inline';
-        // 显示元素信息
-        const elementName = window.WVE.DOMUtils ? window.WVE.DOMUtils.shortNameOf(element) : element.tagName.toLowerCase();
+        // 只显示标签名
+        const elementName = element.tagName.toLowerCase();
         hasSelection.textContent = `✓ ${elementName}`;
       }
       this.logger.info('PropertyPanel: Selection indicator updated - element selected');
