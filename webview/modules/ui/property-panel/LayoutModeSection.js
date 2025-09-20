@@ -70,6 +70,13 @@ window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.Proper
 
     this.onPositionChange = null; // 定位变更回调
     this.onLayoutChange = null; // 布局变更回调
+
+    // 选择状态保护相关
+    this.preservedSelection = null; // 保存的选择状态
+    this.restoreAttemptTimers = []; // 恢复尝试的定时器数组
+    this.selectionRestoreListener = null; // 选择恢复监听器
+    this.domObserver = null; // DOM变化观察器
+    this.continuousMonitorInterval = null; // 持续监控间隔器
   }
 
   createContentElements(container) {
@@ -219,7 +226,49 @@ window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.Proper
           <span class="settings-desc-label">布局:</span>
           <span class="settings-desc-value">${layout.name}</span>
         </div>
+        <div class="settings-desc-row" style="margin-top: 8px;">
+          <button class="manual-restore-btn" style="font-size: 10px; padding: 2px 6px; background: #404040; color: #ccc; border: 1px solid #555; border-radius: 3px; cursor: pointer;">
+            恢复选择
+          </button>
+        </div>
       `;
+
+      // 添加手动恢复按钮事件
+      const manualRestoreBtn = this.currentSettingsDesc.querySelector('.manual-restore-btn');
+      if (manualRestoreBtn) {
+        manualRestoreBtn.addEventListener('click', () => {
+          console.log(`[LayoutModeSection] Manual restore button clicked`);
+          this.manualRestoreSelection();
+        });
+      }
+    }
+  }
+
+  /**
+   * 手动恢复选择状态
+   */
+  manualRestoreSelection() {
+    console.log(`[LayoutModeSection] Manual restore triggered`);
+
+    const app = window.WVE?.app?.();
+    if (!app || !app.selectionManager) {
+      console.error(`[LayoutModeSection] Cannot manual restore - app or selectionManager not available`);
+      return;
+    }
+
+    // 如果有保存的选择状态，尝试恢复
+    if (this.preservedSelection) {
+      console.log(`[LayoutModeSection] Using preserved selection for manual restore`);
+      this.restoreSelectionState(this.preservedSelection, app.selectionManager);
+    } else {
+      // 如果没有保存的状态，尝试重新选择当前元素
+      console.log(`[LayoutModeSection] No preserved selection, trying to restore current element`);
+      if (this.currentElement) {
+        console.log(`[LayoutModeSection] Manually restoring current element:`, this.currentElement);
+        app.selectionManager.select(this.currentElement, true);
+      } else {
+        console.warn(`[LayoutModeSection] No current element to restore`);
+      }
     }
   }
 
@@ -517,6 +566,9 @@ window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.Proper
     console.log(`[LayoutModeSection] Final classes:`, finalClasses);
 
     try {
+      // 保存当前选中状态，避免同步后丢失选择
+      this.preserveSelectionState();
+
       // 构造 Tailwind 样式变更数据
       const changeData = {
         changes: [{
@@ -541,12 +593,590 @@ window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.Proper
           data: changeData
         });
         console.log(`[LayoutModeSection] Message sent successfully`);
+
+        // 检查是否启用了自动刷新模式，如果是则触发事件
+        const app = window.WVE?.app?.();
+        const floatingToolbar = app?.getFloatingToolbar?.();
+        if (floatingToolbar && floatingToolbar.autoRefreshState === 'auto') {
+          document.dispatchEvent(new CustomEvent('wve:styleChange', {
+            detail: {
+              type: 'tailwindStyleChange',
+              data: changeData
+            }
+          }));
+          console.log(`[LayoutModeSection] Auto refresh event dispatched (auto mode enabled)`);
+        } else {
+          console.log(`[LayoutModeSection] Auto refresh skipped (manual mode or toolbar unavailable)`);
+        }
       } else {
         console.error(`[LayoutModeSection] vscode.postMessage not available`);
       }
     } catch (error) {
       console.error(`[LayoutModeSection] Error syncing to HTML file:`, error);
     }
+  }
+
+  /**
+   * 保存当前选中状态，以便在同步后恢复
+   */
+  preserveSelectionState() {
+    console.log(`[LayoutModeSection] ===== PRESERVE SELECTION STATE START =====`);
+
+    // 清除之前的恢复定时器，避免多次并发恢复
+    if (this.restoreSelectionTimer) {
+      clearTimeout(this.restoreSelectionTimer);
+      this.restoreSelectionTimer = null;
+    }
+
+    const selectedElements = document.querySelectorAll('[wve-selected]');
+    console.log(`[LayoutModeSection] Found ${selectedElements.length} selected elements:`, Array.from(selectedElements));
+
+    if (selectedElements.length > 0) {
+      // 获取 WebVisualEditor 实例
+      const app = window.WVE?.app?.();
+      console.log(`[LayoutModeSection] WebVisualEditor app available:`, !!app);
+      console.log(`[LayoutModeSection] SelectionManager available:`, !!(app && app.selectionManager));
+
+      if (app && app.selectionManager) {
+        // 保存选中的元素信息，添加更多调试信息
+        this.preservedSelection = Array.from(selectedElements).map((el, index) => {
+          const elementInfo = {
+            wveId: el.dataset.wveId,
+            wveCodeStart: el.dataset.wveCodeStart,
+            wveCodeEnd: el.dataset.wveCodeEnd,
+            selector: this.generateElementSelector(el),
+            element: el,
+            tagName: el.tagName,
+            className: el.className,
+            id: el.id,
+            innerHTML: el.innerHTML.substring(0, 100) + '...'
+          };
+
+          console.log(`[LayoutModeSection] Preserving element ${index + 1}:`, {
+            wveId: elementInfo.wveId,
+            wveCodeStart: elementInfo.wveCodeStart,
+            wveCodeEnd: elementInfo.wveCodeEnd,
+            selector: elementInfo.selector,
+            tagName: elementInfo.tagName,
+            className: elementInfo.className,
+            id: elementInfo.id
+          });
+
+          return elementInfo;
+        });
+
+        console.log(`[LayoutModeSection] Successfully preserved ${this.preservedSelection.length} elements`);
+
+        // 【关键】：将选择状态保存到 sessionStorage，确保 WebView 重新加载后能恢复
+        this.saveSelectionToStorage(this.preservedSelection);
+
+        // 【测试】：立即测试 sessionStorage 是否可用
+        this.testSessionStorage();
+
+        // 设置多重恢复机制，确保选择状态能够被恢复
+        this.setupMultipleRestoreAttempts(app.selectionManager);
+      } else {
+        console.error(`[LayoutModeSection] Cannot preserve selection - app or selectionManager not available`);
+      }
+    } else {
+      console.warn(`[LayoutModeSection] No selected elements found to preserve`);
+    }
+
+    console.log(`[LayoutModeSection] ===== PRESERVE SELECTION STATE END =====`);
+  }
+
+  /**
+   * 将选择状态保存到 sessionStorage
+   */
+  saveSelectionToStorage(preservedSelection) {
+    console.log(`[LayoutModeSection] ===== SAVING SELECTION TO STORAGE =====`);
+
+    try {
+      const storageKey = 'wve-preserved-selection';
+      const dataToSave = {
+        timestamp: Date.now(),
+        selections: preservedSelection.map(sel => ({
+          wveId: sel.wveId,
+          wveCodeStart: sel.wveCodeStart,
+          wveCodeEnd: sel.wveCodeEnd,
+          selector: sel.selector,
+          tagName: sel.tagName,
+          className: sel.className,
+          id: sel.id
+        }))
+      };
+
+      console.log(`[LayoutModeSection] Data to save:`, dataToSave);
+      console.log(`[LayoutModeSection] SessionStorage available:`, typeof sessionStorage !== 'undefined');
+      console.log(`[LayoutModeSection] SessionStorage before save - length:`, sessionStorage.length);
+
+      sessionStorage.setItem(storageKey, JSON.stringify(dataToSave));
+
+      // 验证保存是否成功
+      const verifyData = sessionStorage.getItem(storageKey);
+      console.log(`[LayoutModeSection] Verification - data saved successfully:`, verifyData !== null);
+      console.log(`[LayoutModeSection] SessionStorage after save - length:`, sessionStorage.length);
+
+      if (verifyData) {
+        console.log(`[LayoutModeSection] ✅ Selection state saved successfully to sessionStorage`);
+      } else {
+        console.error(`[LayoutModeSection] ❌ Failed to save selection state - verification failed`);
+      }
+    } catch (error) {
+      console.error(`[LayoutModeSection] ❌ Failed to save selection to storage:`, error);
+    }
+
+    console.log(`[LayoutModeSection] ===== SAVING SELECTION TO STORAGE END =====`);
+  }
+
+  /**
+   * 从 sessionStorage 恢复选择状态
+   */
+  loadSelectionFromStorage() {
+    try {
+      const storageKey = 'wve-preserved-selection';
+      const savedData = sessionStorage.getItem(storageKey);
+
+      if (!savedData) {
+        console.log(`[LayoutModeSection] No saved selection found in storage`);
+        return null;
+      }
+
+      const parsedData = JSON.parse(savedData);
+      const ageMs = Date.now() - parsedData.timestamp;
+
+      // 如果保存的数据超过10秒，认为过期
+      if (ageMs > 10000) {
+        console.log(`[LayoutModeSection] Saved selection is too old (${ageMs}ms), ignoring`);
+        sessionStorage.removeItem(storageKey);
+        return null;
+      }
+
+      console.log(`[LayoutModeSection] Loaded selection from storage:`, parsedData);
+      return parsedData.selections;
+    } catch (error) {
+      console.error(`[LayoutModeSection] Failed to load selection from storage:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * 清除存储的选择状态
+   */
+  clearStoredSelection() {
+    try {
+      const storageKey = 'wve-preserved-selection';
+      sessionStorage.removeItem(storageKey);
+      console.log(`[LayoutModeSection] Cleared stored selection`);
+    } catch (error) {
+      console.error(`[LayoutModeSection] Failed to clear stored selection:`, error);
+    }
+  }
+
+  /**
+   * 测试 sessionStorage 是否在WebView中正常工作
+   */
+  testSessionStorage() {
+    console.log(`[LayoutModeSection] ===== TESTING SESSION STORAGE =====`);
+
+    try {
+      const testKey = 'wve-test-storage';
+      const testData = { timestamp: Date.now(), test: 'sessionStorage功能测试' };
+
+      // 测试写入
+      sessionStorage.setItem(testKey, JSON.stringify(testData));
+      console.log(`[LayoutModeSection] ✅ SessionStorage write test passed`);
+
+      // 测试读取
+      const retrievedData = sessionStorage.getItem(testKey);
+      if (retrievedData) {
+        const parsedData = JSON.parse(retrievedData);
+        console.log(`[LayoutModeSection] ✅ SessionStorage read test passed:`, parsedData);
+      } else {
+        console.error(`[LayoutModeSection] ❌ SessionStorage read test failed`);
+      }
+
+      // 清理测试数据
+      sessionStorage.removeItem(testKey);
+      console.log(`[LayoutModeSection] ✅ SessionStorage cleanup completed`);
+
+      // 报告 sessionStorage 状态
+      console.log(`[LayoutModeSection] SessionStorage status:`, {
+        available: typeof sessionStorage !== 'undefined',
+        length: sessionStorage.length,
+        keys: Object.keys(sessionStorage)
+      });
+
+    } catch (error) {
+      console.error(`[LayoutModeSection] ❌ SessionStorage test failed:`, error);
+    }
+
+    console.log(`[LayoutModeSection] ===== SESSION STORAGE TEST END =====`);
+  }
+
+  /**
+   * 设置多重恢复尝试机制，确保选择状态能够被恢复
+   */
+  setupMultipleRestoreAttempts(selectionManager) {
+    console.log(`[LayoutModeSection] Setting up multiple restore attempts`);
+
+    // 清理之前的恢复尝试
+    this.clearRestoreAttempts();
+
+    // 方案1: 短期多次尝试 - 在同步后立即开始尝试恢复
+    const shortTermAttempts = [200, 500, 800, 1200, 1800]; // 5次尝试，递增延迟
+    shortTermAttempts.forEach((delay, index) => {
+      const timer = setTimeout(() => {
+        if (this.preservedSelection && this.attemptRestore(selectionManager, `short-term-${index + 1}`)) {
+          this.clearRestoreAttempts(); // 恢复成功后清理所有其他尝试
+        }
+      }, delay);
+      this.restoreAttemptTimers.push(timer);
+    });
+
+    // 方案2: 监听DOM变化，当检测到元素重新出现时立即恢复
+    this.setupDOMChangeListener(selectionManager);
+
+    // 方案3: 监听WebView消息，当接收到特定消息时恢复
+    this.setupMessageListener(selectionManager);
+
+    // 方案4: 长期保护 - 如果前面的方案都失败，继续尝试
+    const longTermTimer = setTimeout(() => {
+      if (this.preservedSelection) {
+        console.log(`[LayoutModeSection] Long-term restore attempt`);
+        this.attemptRestore(selectionManager, 'long-term');
+        this.clearRestoreAttempts();
+      }
+    }, 3000);
+    this.restoreAttemptTimers.push(longTermTimer);
+
+    // 方案5: 持续监控 - 定期检查选择状态，如果丢失则恢复
+    this.setupContinuousMonitoring(selectionManager);
+  }
+
+  /**
+   * 尝试恢复选择状态
+   */
+  attemptRestore(selectionManager, attemptName) {
+    if (!this.preservedSelection || !selectionManager) {
+      return false;
+    }
+
+    console.log(`[LayoutModeSection] Attempting restore: ${attemptName}`);
+
+    // 检查目标元素是否已经存在
+    let foundElements = 0;
+    for (const preserved of this.preservedSelection) {
+      let targetElement = null;
+
+      if (preserved.wveId) {
+        targetElement = document.querySelector(`[data-wve-id="${preserved.wveId}"]`);
+      }
+
+      if (!targetElement && preserved.selector) {
+        try {
+          targetElement = document.querySelector(preserved.selector);
+        } catch (e) {
+          // 忽略选择器错误
+        }
+      }
+
+      if (targetElement) {
+        foundElements++;
+      }
+    }
+
+    console.log(`[LayoutModeSection] ${attemptName}: Found ${foundElements}/${this.preservedSelection.length} elements`);
+
+    // 如果找到所有元素，执行恢复
+    if (foundElements === this.preservedSelection.length) {
+      this.restoreSelectionState(this.preservedSelection, selectionManager);
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * 设置DOM变化监听器
+   */
+  setupDOMChangeListener(selectionManager) {
+    if (this.domObserver) {
+      this.domObserver.disconnect();
+    }
+
+    this.domObserver = new MutationObserver((mutations) => {
+      if (!this.preservedSelection) {
+        return;
+      }
+
+      // 检查是否有新元素添加
+      let hasNewElements = false;
+      mutations.forEach(mutation => {
+        if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+          hasNewElements = true;
+        }
+      });
+
+      if (hasNewElements) {
+        console.log(`[LayoutModeSection] DOM changed, attempting restore`);
+        setTimeout(() => {
+          if (this.attemptRestore(selectionManager, 'dom-change')) {
+            this.clearRestoreAttempts();
+          }
+        }, 100);
+      }
+    });
+
+    this.domObserver.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
+  }
+
+  /**
+   * 设置消息监听器
+   */
+  setupMessageListener(selectionManager) {
+    if (this.selectionRestoreListener) {
+      window.removeEventListener('message', this.selectionRestoreListener);
+    }
+
+    this.selectionRestoreListener = (event) => {
+      if (!this.preservedSelection) {
+        return;
+      }
+
+      // 监听各种可能的消息类型
+      const messageTypes = ['webviewReloaded', 'contentUpdated', 'documentChanged'];
+
+      if (event.data && messageTypes.includes(event.data.type)) {
+        console.log(`[LayoutModeSection] Received ${event.data.type} message, attempting restore`);
+
+        setTimeout(() => {
+          if (this.attemptRestore(selectionManager, `message-${event.data.type}`)) {
+            this.clearRestoreAttempts();
+          }
+        }, 150);
+      }
+    };
+
+    window.addEventListener('message', this.selectionRestoreListener);
+  }
+
+  /**
+   * 设置持续监控，定期检查选择状态
+   */
+  setupContinuousMonitoring(selectionManager) {
+    // 清理之前的监控
+    if (this.continuousMonitorInterval) {
+      clearInterval(this.continuousMonitorInterval);
+    }
+
+    console.log(`[LayoutModeSection] Setting up continuous monitoring`);
+
+    this.continuousMonitorInterval = setInterval(() => {
+      if (!this.preservedSelection) {
+        return; // 没有需要恢复的选择
+      }
+
+      // 检查当前是否有选中的元素
+      const currentSelected = document.querySelectorAll('[wve-selected]');
+      const selectionManagerSelected = selectionManager.getSelected();
+
+      console.log(`[LayoutModeSection] Monitoring check: DOM=${currentSelected.length}, Manager=${selectionManagerSelected.size} selected`);
+
+      // 如果没有选中的元素，尝试恢复
+      if (currentSelected.length === 0 && selectionManagerSelected.size === 0) {
+        console.log(`[LayoutModeSection] Continuous monitoring detected selection loss, attempting restore`);
+        if (this.attemptRestore(selectionManager, 'continuous-monitor')) {
+          // 恢复成功，清理监控
+          this.clearRestoreAttempts();
+        }
+      }
+    }, 1000); // 每秒检查一次
+  }
+
+  /**
+   * 清理所有恢复尝试
+   */
+  clearRestoreAttempts() {
+    // 清理定时器
+    if (this.restoreAttemptTimers) {
+      this.restoreAttemptTimers.forEach(timer => clearTimeout(timer));
+      this.restoreAttemptTimers = [];
+    }
+
+    // 清理DOM观察器
+    if (this.domObserver) {
+      this.domObserver.disconnect();
+      this.domObserver = null;
+    }
+
+    // 清理消息监听器
+    if (this.selectionRestoreListener) {
+      window.removeEventListener('message', this.selectionRestoreListener);
+      this.selectionRestoreListener = null;
+    }
+
+    // 清理持续监控
+    if (this.continuousMonitorInterval) {
+      clearInterval(this.continuousMonitorInterval);
+      this.continuousMonitorInterval = null;
+    }
+
+    // 清理保存的选择状态
+    this.preservedSelection = null;
+
+    // 注意：不在这里清除 sessionStorage，让 WebView 重新加载后的恢复机制来处理
+
+    console.log(`[LayoutModeSection] Cleared all restore attempts and monitoring`);
+  }
+
+  /**
+   * 恢复选中状态
+   */
+  restoreSelectionState(preservedSelection, selectionManager) {
+    console.log(`[LayoutModeSection] ===== RESTORE SELECTION STATE START =====`);
+
+    if (!preservedSelection || !selectionManager) {
+      console.warn(`[LayoutModeSection] Cannot restore selection - missing data or manager`, {
+        preservedSelection: !!preservedSelection,
+        selectionManager: !!selectionManager
+      });
+      return;
+    }
+
+    console.log(`[LayoutModeSection] Attempting to restore ${preservedSelection.length} elements`);
+    console.log(`[LayoutModeSection] Current DOM state check...`);
+
+    // 检查当前DOM中的元素状态
+    const allElementsWithWveId = document.querySelectorAll('[data-wve-id]');
+    console.log(`[LayoutModeSection] Current DOM has ${allElementsWithWveId.length} elements with wve-id`);
+
+    const currentSelectedElements = document.querySelectorAll('[wve-selected]');
+    console.log(`[LayoutModeSection] Current DOM has ${currentSelectedElements.length} selected elements`);
+
+    // 先清除现有选择，确保干净的状态
+    selectionManager.clearSelection();
+    console.log(`[LayoutModeSection] Cleared existing selection`);
+
+    let restoredCount = 0;
+
+    preservedSelection.forEach((preserved, index) => {
+      console.log(`[LayoutModeSection] Restoring element ${index + 1}/${preservedSelection.length}:`);
+      console.log(`[LayoutModeSection]   - wveId: ${preserved.wveId}`);
+      console.log(`[LayoutModeSection]   - selector: ${preserved.selector}`);
+      console.log(`[LayoutModeSection]   - tagName: ${preserved.tagName}`);
+
+      let targetElement = null;
+
+      // 尝试通过 wveId 查找
+      if (preserved.wveId) {
+        targetElement = document.querySelector(`[data-wve-id="${preserved.wveId}"]`);
+        console.log(`[LayoutModeSection]   - Search by wveId "${preserved.wveId}":`, targetElement ? 'FOUND' : 'NOT FOUND');
+        if (targetElement) {
+          console.log(`[LayoutModeSection]     Found element:`, {
+            tagName: targetElement.tagName,
+            className: targetElement.className,
+            id: targetElement.id,
+            hasWveSelected: targetElement.hasAttribute('wve-selected')
+          });
+        }
+      }
+
+      // 如果通过 wveId 找不到，尝试使用选择器
+      if (!targetElement && preserved.selector) {
+        try {
+          targetElement = document.querySelector(preserved.selector);
+          console.log(`[LayoutModeSection]   - Search by selector "${preserved.selector}":`, targetElement ? 'FOUND' : 'NOT FOUND');
+          if (targetElement) {
+            console.log(`[LayoutModeSection]     Found element by selector:`, {
+              tagName: targetElement.tagName,
+              className: targetElement.className,
+              id: targetElement.id,
+              wveId: targetElement.dataset.wveId
+            });
+          }
+        } catch (e) {
+          console.warn(`[LayoutModeSection]   - Selector error:`, preserved.selector, e);
+        }
+      }
+
+      // 恢复选中状态
+      if (targetElement && selectionManager) {
+        console.log(`[LayoutModeSection]   - RESTORING selection for element ${index + 1}`);
+        try {
+          // 使用 emit=false 避免触发过多的选择变更事件，除了最后一个元素
+          const shouldEmit = index === preservedSelection.length - 1;
+          selectionManager.select(targetElement, shouldEmit);
+          restoredCount++;
+
+          // 验证选择是否成功
+          const isSelected = targetElement.hasAttribute('wve-selected');
+          console.log(`[LayoutModeSection]     Selection success: ${isSelected}`);
+        } catch (error) {
+          console.error(`[LayoutModeSection]     Selection failed:`, error);
+        }
+      } else {
+        console.warn(`[LayoutModeSection]   - FAILED to restore element ${index + 1}:`, {
+          targetElement: !!targetElement,
+          selectionManager: !!selectionManager,
+          preserved
+        });
+      }
+    });
+
+    console.log(`[LayoutModeSection] Selection restoration completed: ${restoredCount}/${preservedSelection.length} elements restored`);
+
+    // 验证最终状态
+    const finalSelectedElements = document.querySelectorAll('[wve-selected]');
+    console.log(`[LayoutModeSection] Final verification: ${finalSelectedElements.length} elements now selected`);
+
+    // 强制更新属性面板以反映恢复的选择
+    if (restoredCount > 0) {
+      console.log(`[LayoutModeSection] Updating property panel...`);
+      setTimeout(() => {
+        const app = window.WVE?.app?.();
+        if (app && app.propertyPanel && app.selectionManager) {
+          const selected = app.selectionManager.getSelected();
+          console.log(`[LayoutModeSection] SelectionManager reports ${selected.size} selected elements`);
+
+          if (selected.size > 0) {
+            const lastSelected = Array.from(selected)[selected.size - 1];
+            console.log(`[LayoutModeSection] Updating property panel with element:`, lastSelected);
+            app.propertyPanel.updateForElement(lastSelected);
+            console.log(`[LayoutModeSection] Property panel update completed`);
+          } else {
+            console.warn(`[LayoutModeSection] No elements in selection manager after restore`);
+          }
+        } else {
+          console.error(`[LayoutModeSection] Cannot update property panel - missing app/propertyPanel/selectionManager`);
+        }
+      }, 50);
+    } else {
+      console.warn(`[LayoutModeSection] No elements were restored, property panel will show empty state`);
+    }
+
+    console.log(`[LayoutModeSection] ===== RESTORE SELECTION STATE END =====`);
+  }
+
+  /**
+   * 生成可靠的元素选择器用于恢复选择
+   */
+  generateElementSelector(element) {
+    // 优先使用 data-wve-id
+    if (element.dataset.wveId) {
+      return `[data-wve-id="${element.dataset.wveId}"]`;
+    }
+
+    // 其次使用 ID
+    if (element.id) {
+      return `#${element.id}`;
+    }
+
+    // 最后使用 nth-child 路径
+    return this.generateNthChildSelector(element);
   }
 
   /**
@@ -571,7 +1201,16 @@ window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.Proper
       });
     }
 
-    // 策略3: 使用标签名 + 类名（简化版，避免过于复杂的选择器）
+    // 策略3: 使用 nth-child 和父元素路径（精确定位）
+    const nthChildSelector = this.generateNthChildSelector(element);
+    if (nthChildSelector) {
+      strategies.push({
+        type: 'nth-child',
+        selector: nthChildSelector
+      });
+    }
+
+    // 策略4: 使用标签名 + 类名（简化版，避免过于复杂的选择器）
     if (element.className) {
       const simpleClasses = element.className.trim().split(/\s+/)
         .filter(cls =>
@@ -588,13 +1227,55 @@ window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.Proper
       }
     }
 
-    // 策略4: 只使用标签名（最后的回退）
+    // 策略5: 只使用标签名（最后的回退）
     strategies.push({
       type: 'tag',
       selector: element.tagName.toLowerCase()
     });
 
     return strategies;
+  }
+
+  /**
+   * 生成基于 nth-child 的精确选择器
+   */
+  generateNthChildSelector(element) {
+    try {
+      const path = [];
+      let current = element;
+
+      // 向上遍历到body或html，构建路径
+      while (current && current.tagName && current.tagName !== 'BODY' && current.tagName !== 'HTML') {
+        const parent = current.parentElement;
+        if (!parent) {
+          break;
+        }
+
+        // 计算当前元素在同类型兄弟元素中的位置
+        const siblings = Array.from(parent.children).filter(child =>
+          child.tagName === current.tagName
+        );
+
+        if (siblings.length > 1) {
+          const index = siblings.indexOf(current) + 1;
+          path.unshift(`${current.tagName.toLowerCase()}:nth-of-type(${index})`);
+        } else {
+          path.unshift(current.tagName.toLowerCase());
+        }
+
+        current = parent;
+
+        // 限制路径深度，避免过于复杂的选择器
+        if (path.length >= 3) {
+          break;
+        }
+      }
+
+      return path.length > 0 ? path.join(' > ') : null;
+    } catch (error) {
+      console.warn('[LayoutModeSection] Error generating nth-child selector:', error);
+      return null;
+    }
   }
 
   /**
@@ -738,5 +1419,19 @@ window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.Proper
     `;
 
     document.head.appendChild(style);
+  }
+
+  /**
+   * 清理资源，包括定时器和事件监听器
+   */
+  destroy() {
+    // 清理所有恢复尝试
+    this.clearRestoreAttempts();
+
+    // 清理保存的选择状态
+    this.preservedSelection = null;
+    this.currentElement = null;
+
+    console.log(`[LayoutModeSection] Resources cleaned up`);
   }
 };

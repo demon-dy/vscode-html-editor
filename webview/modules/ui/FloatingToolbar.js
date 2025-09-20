@@ -14,6 +14,10 @@ window.WVE.FloatingToolbar = class FloatingToolbar {
     this.dimensionsDisplay = null;
     this.dimensionsUpdateThrottle = null;
 
+    // 自动刷新状态管理 - 简化为两种状态
+    this.autoRefreshState = this.loadAutoRefreshState(); // 'manual' | 'auto'
+    this.autoRefreshListener = null;
+
     this.logger.info('Initializing FloatingToolbar');
   }
 
@@ -77,6 +81,8 @@ window.WVE.FloatingToolbar = class FloatingToolbar {
     setTimeout(() => {
       this.updateDimensionsNow();
       this.showDimensions();
+      // 恢复自动刷新状态
+      this.restoreAutoRefreshState();
     }, 500);
 
     // 触发样式同步，确保任意值类生效
@@ -107,8 +113,9 @@ window.WVE.FloatingToolbar = class FloatingToolbar {
         <button id="${c.toolbarLinkCode}" type="button" class="flex items-center justify-center w-6 h-6 rounded hover:bg-gray-700 text-gray-400 hover:text-white transition-all duration-200" title="关联代码">
           <i data-lucide="link" class="w-4 h-4"></i>
         </button>
-        <button id="${c.toolbarRefresh}" type="button" class="flex items-center justify-center w-6 h-6 rounded hover:bg-gray-700 text-gray-400 hover:text-white transition-all duration-200" title="刷新视图">
+        <button id="${c.toolbarRefresh}" type="button" class="relative flex items-center justify-center w-6 h-6 rounded hover:bg-gray-700 text-gray-400 hover:text-white transition-all duration-200" title="刷新视图">
           <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+          <span id="wve-refresh-badge" class="absolute -top-1 -right-1 text-[8px] bg-blue-500 text-white px-1 py-0.5 rounded hidden">auto</span>
         </button>
         <div class="flex bg-[#444444] rounded p-[2px] items-center">
           <button id="${c.toolbarZoomOut}" type="button" class="flex items-center justify-center w-5 h-5 rounded hover:bg-gray-700 text-gray-400 hover:text-white transition-all duration-200" title="缩小视图">
@@ -207,14 +214,18 @@ window.WVE.FloatingToolbar = class FloatingToolbar {
 
     // 编辑模式切换
     this.toolbarEditMode?.addEventListener('change', (event) => {
-      if (!event.target.checked) return;
+      if (!event.target.checked) {
+        return;
+      }
       this.logger.debug('Edit mode selected');
       this.toggleEditMode();
     });
 
     // 预览模式切换
     this.toolbarPreviewMode?.addEventListener('change', (event) => {
-      if (!event.target.checked) return;
+      if (!event.target.checked) {
+        return;
+      }
       this.logger.debug('Preview mode selected');
       this.togglePreviewMode();
     });
@@ -233,10 +244,10 @@ window.WVE.FloatingToolbar = class FloatingToolbar {
       this.updateLinkCodeButton();
     });
 
-    // 刷新视图
+    // 刷新视图 - 三状态切换：手动刷新 → 自动刷新 → 禁用自动刷新
     this.toolbarRefresh?.addEventListener('click', () => {
-      this.logger.debug('Refresh button clicked');
-      this.eventManager.emitRefresh();
+      this.logger.debug('Refresh button clicked, current state:', this.autoRefreshState);
+      this.cycleAutoRefreshState();
     });
 
     // 缩放控制
@@ -391,7 +402,9 @@ window.WVE.FloatingToolbar = class FloatingToolbar {
    * 预览模式下清空选择，避免误操作
    */
   clearSelectionForPreview() {
-    if (!this.stateManager.previewMode) return;
+    if (!this.stateManager.previewMode) {
+      return;
+    }
 
     try {
       const app = window.WVE?.app?.();
@@ -629,5 +642,142 @@ window.WVE.FloatingToolbar = class FloatingToolbar {
    */
   getDragHandle() {
     return this.toolbarDragHandle;
+  }
+
+  /**
+   * 切换自动刷新状态：手动 ↔ 自动
+   */
+  cycleAutoRefreshState() {
+    switch (this.autoRefreshState) {
+      case 'manual':
+        // 手动刷新：执行一次刷新，然后切换到自动
+        this.eventManager.emitRefresh();
+        this.autoRefreshState = 'auto';
+        this.enableAutoRefresh();
+        break;
+      case 'auto':
+        // 自动刷新：切换回手动状态（不触发刷新）
+        this.autoRefreshState = 'manual';
+        this.disableAutoRefresh();
+        break;
+    }
+
+    this.updateRefreshButtonState();
+    this.saveAutoRefreshState();
+    this.logger.info('Auto refresh state changed to:', this.autoRefreshState);
+  }
+
+  /**
+   * 启用自动刷新
+   */
+  enableAutoRefresh() {
+    if (this.autoRefreshListener) {
+      this.disableAutoRefresh(); // 先清理之前的监听器
+    }
+
+    // 监听属性面板的 Tailwind 样式变更事件
+    this.autoRefreshListener = (event) => {
+      if (event.detail?.type === 'tailwindStyleChange') {
+        this.logger.debug('Auto refresh triggered by Tailwind style change');
+        // 延迟执行刷新，确保样式已应用
+        setTimeout(() => {
+          this.eventManager.emitRefresh();
+        }, 100);
+      }
+    };
+
+    // 监听全局事件
+    document.addEventListener('wve:styleChange', this.autoRefreshListener);
+    this.logger.info('Auto refresh enabled - listening for style changes');
+  }
+
+  /**
+   * 禁用自动刷新
+   */
+  disableAutoRefresh() {
+    if (this.autoRefreshListener) {
+      document.removeEventListener('wve:styleChange', this.autoRefreshListener);
+      this.autoRefreshListener = null;
+      this.logger.info('Auto refresh disabled');
+    }
+  }
+
+  /**
+   * 更新刷新按钮的状态显示
+   */
+  updateRefreshButtonState() {
+    const badge = this.uiManager.getUIRoot().querySelector('#wve-refresh-badge');
+    const button = this.toolbarRefresh;
+
+    if (!badge || !button) {
+      return;
+    }
+
+    switch (this.autoRefreshState) {
+      case 'manual':
+        badge.classList.add('hidden');
+        button.title = '刷新视图';
+        button.classList.remove('text-blue-400');
+        button.classList.add('text-gray-400');
+        break;
+      case 'auto':
+        badge.classList.remove('hidden');
+        badge.textContent = 'auto';
+        badge.className = 'absolute -top-1 -right-1 text-[8px] bg-blue-500 text-white px-1 py-1.5 rounded';
+        button.title = '自动刷新已启用 - 点击切换到手动模式';
+        button.classList.remove('text-gray-400');
+        button.classList.add('text-blue-400');
+        break;
+    }
+  }
+
+  /**
+   * 保存自动刷新状态到 localStorage
+   */
+  saveAutoRefreshState() {
+    try {
+      localStorage.setItem('wve-auto-refresh-state', this.autoRefreshState);
+      this.logger.debug('Auto refresh state saved:', this.autoRefreshState);
+    } catch (error) {
+      this.logger.warn('Failed to save auto refresh state:', error);
+    }
+  }
+
+  /**
+   * 从 localStorage 加载自动刷新状态
+   */
+  loadAutoRefreshState() {
+    try {
+      const saved = localStorage.getItem('wve-auto-refresh-state');
+      if (saved && ['manual', 'auto'].includes(saved)) {
+        this.logger.debug('Auto refresh state loaded:', saved);
+        return saved;
+      }
+    } catch (error) {
+      this.logger.warn('Failed to load auto refresh state:', error);
+    }
+    return 'manual'; // 默认状态
+  }
+
+  /**
+   * 恢复自动刷新状态（初始化后调用）
+   */
+  restoreAutoRefreshState() {
+    this.logger.info('Restoring auto refresh state:', this.autoRefreshState);
+
+    // 根据保存的状态恢复功能
+    switch (this.autoRefreshState) {
+      case 'auto':
+        this.enableAutoRefresh();
+        break;
+      case 'manual':
+      default:
+        // 手动状态不需要特殊处理
+        break;
+    }
+
+    // 更新按钮状态显示
+    this.updateRefreshButtonState();
+    this.logger.info('Auto refresh state restored successfully');
   }
 };

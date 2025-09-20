@@ -244,4 +244,11 @@ window.WVE.WebVisualEditor = class WebVisualEditor {
   getMovableManager() {
     return this.movableManager;
   }
+
+  /**
+   * 获取悬浮工具栏
+   */
+  getFloatingToolbar() {
+    return this.floatingToolbar;
+  }
 };

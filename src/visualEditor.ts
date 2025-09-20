@@ -141,7 +141,7 @@ export class VisualEditorProvider implements vscode.CustomTextEditorProvider {
           await this.handleStyleChange(code, event.data);
           break;
         case 'tailwindStyleChange':
-          await this.handleTailwindStyleChange(code, event.data);
+          await this.handleTailwindStyleChange(code, panel, event.data);
           break;
         case 'cssToTailwindRequest':
           await this.handleCSSToTailwindRequest(panel, event);
@@ -682,7 +682,6 @@ export class VisualEditorProvider implements vscode.CustomTextEditorProvider {
 
           // 各种布局模式对应的区域
           { path: 'modules/ui/property-panel/NoneLayoutSection.js', description: '无布局模式属性区域' },
-          { path: 'modules/ui/property-panel/AbsoluteLayoutSection.js', description: '绝对布局模式属性区域' },
           { path: 'modules/ui/property-panel/FlexLayoutSection.js', description: '响应式布局模式属性区域' },
           { path: 'modules/ui/property-panel/GridLayoutSection.js', description: '网格布局模式属性区域' },
 
@@ -1104,7 +1103,7 @@ export class VisualEditorProvider implements vscode.CustomTextEditorProvider {
   /**
    * 处理Tailwind样式变更事件
    */
-  private async handleTailwindStyleChange(code: vscode.TextDocument, data: any): Promise<void> {
+  private async handleTailwindStyleChange(code: vscode.TextDocument, panel: vscode.WebviewPanel, data: any): Promise<void> {
     try {
       const textDocument = code;
 
@@ -1153,8 +1152,19 @@ export class VisualEditorProvider implements vscode.CustomTextEditorProvider {
       }
 
       if (edits.length > 0) {
+        // 标记为编辑源，防止触发WebView重新加载
+        this.editedBy.add(panel);
+
         // 使用重试机制应用Tailwind样式编辑
         await this.applyTailwindEditsWithRetry(textDocument, edits);
+
+        // 发送完成通知到WebView，触发选择状态恢复
+        this.codes.get(code)?.forEach(panel => {
+          panel.webview.postMessage({
+            type: 'documentChanged',
+            timestamp: Date.now()
+          });
+        });
       }
     } catch (error) {
       console.error('Error handling Tailwind style change:', error);

@@ -32,6 +32,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     // 初始化编辑器
     await webVisualEditor.init();
 
+    // 检查并恢复保存的选择状态（WebView重新加载后）
+    setTimeout(() => {
+      restoreSelectionAfterReload();
+    }, 1000); // 给其他组件足够的初始化时间
+
     // 添加调试面板（开发环境）
     // setTimeout(() => {
     //   createTailwindDebugPanel();
@@ -42,6 +47,118 @@ document.addEventListener('DOMContentLoaded', async () => {
     logger.error('Failed to initialize WebView:', error);
   }
 });
+
+/**
+ * WebView重新加载后恢复选择状态
+ */
+function restoreSelectionAfterReload() {
+  const logger = new window.WVE.Logger('SelectionRestore');
+  logger.info('===== SELECTION RESTORE AFTER RELOAD START =====');
+
+  try {
+    const storageKey = 'wve-preserved-selection';
+
+    // 详细调试 sessionStorage 状态
+    logger.info('SessionStorage debugging:');
+    logger.info('  - Storage available:', typeof sessionStorage !== 'undefined');
+    logger.info('  - Storage length:', sessionStorage.length);
+
+    // 列出所有 sessionStorage 项目
+    const allKeys = [];
+    for (let i = 0; i < sessionStorage.length; i++) {
+      allKeys.push(sessionStorage.key(i));
+    }
+    logger.info('  - All storage keys:', allKeys);
+
+    const savedData = sessionStorage.getItem(storageKey);
+    logger.info('  - Target key exists:', savedData !== null);
+    logger.info('  - Saved data:', savedData);
+
+    if (!savedData) {
+      logger.info('No saved selection found - selection was not saved or was cleared');
+      return;
+    }
+
+    const parsedData = JSON.parse(savedData);
+    const ageMs = Date.now() - parsedData.timestamp;
+
+    // 检查数据是否过期（超过10秒）
+    if (ageMs > 10000) {
+      logger.info(`Saved selection is too old (${ageMs}ms), ignoring`);
+      sessionStorage.removeItem(storageKey);
+      return;
+    }
+
+    logger.info(`Found saved selection data (${ageMs}ms old):`, parsedData);
+
+    // 获取应用实例
+    const app = window.WVE?.app?.();
+    if (!app || !app.selectionManager) {
+      logger.warn('App or SelectionManager not available for restoration');
+      return;
+    }
+
+    // 尝试恢复选择
+    let restoredCount = 0;
+    for (const selectionData of parsedData.selections) {
+      let targetElement = null;
+
+      // 策略1: 通过 wveCodeStart 和 wveCodeEnd 查找
+      if (selectionData.wveCodeStart && selectionData.wveCodeEnd) {
+        targetElement = document.querySelector(`[data-wve-code-start="${selectionData.wveCodeStart}"][data-wve-code-end="${selectionData.wveCodeEnd}"]`);
+        logger.info(`Search by code range [${selectionData.wveCodeStart}-${selectionData.wveCodeEnd}]:`, targetElement ? 'FOUND' : 'NOT FOUND');
+      }
+
+      // 策略2: 通过 wveId 查找
+      if (!targetElement && selectionData.wveId) {
+        targetElement = document.querySelector(`[data-wve-id="${selectionData.wveId}"]`);
+        logger.info(`Search by wveId "${selectionData.wveId}":`, targetElement ? 'FOUND' : 'NOT FOUND');
+      }
+
+      // 策略3: 通过选择器查找
+      if (!targetElement && selectionData.selector) {
+        try {
+          targetElement = document.querySelector(selectionData.selector);
+          logger.info(`Search by selector "${selectionData.selector}":`, targetElement ? 'FOUND' : 'NOT FOUND');
+        } catch (e) {
+          logger.warn(`Invalid selector: ${selectionData.selector}`, e);
+        }
+      }
+
+      // 恢复选择
+      if (targetElement) {
+        logger.info('Restoring selection for element:', targetElement);
+        app.selectionManager.select(targetElement, true);
+        restoredCount++;
+      } else {
+        logger.warn('Could not find element for restoration:', selectionData);
+      }
+    }
+
+    logger.info(`Selection restoration completed: ${restoredCount}/${parsedData.selections.length} elements restored`);
+
+    // 更新属性面板
+    if (restoredCount > 0) {
+      const selected = app.selectionManager.getSelected();
+      if (selected.size > 0 && app.propertyPanel) {
+        const lastSelected = Array.from(selected)[selected.size - 1];
+        app.propertyPanel.updateForElement(lastSelected);
+        logger.info('Property panel updated with restored selection');
+      }
+    }
+
+    // 只有在成功恢复后才清除保存的数据
+    if (restoredCount > 0) {
+      sessionStorage.removeItem(storageKey);
+      logger.info('Cleared saved selection data after successful restoration');
+    } else {
+      logger.warn('Did not clear saved selection data - restoration failed');
+    }
+
+  } catch (error) {
+    logger.error('Error during selection restoration:', error);
+  }
+}
 
 // 导出全局实例供其他模块使用
 window.WVE.app = () => webVisualEditor;

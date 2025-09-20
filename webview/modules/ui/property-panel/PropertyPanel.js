@@ -29,7 +29,6 @@ window.WVE.PropertyPanel = class PropertyPanel {
     // 布局模式对应的区域
     this.layoutSections = {
       none: null,       // NoneLayoutSection
-      absolute: null,   // AbsoluteLayoutSection
       flex: null,       // FlexLayoutSection
       grid: null        // GridLayoutSection
     };
@@ -249,8 +248,17 @@ window.WVE.PropertyPanel = class PropertyPanel {
 
     const title = document.createElement('h3');
     title.className = 'new-panel-title';
-    title.textContent = 'Design';
+    title.innerHTML = `
+      Design
+      <span class="selection-indicator" style="opacity: 0.6; font-size: 11px; font-weight: normal; margin-left: 8px;">
+        <span class="no-selection">未选中元素</span>
+        <span class="has-selection" style="display: none;">已选中元素</span>
+      </span>
+    `;
     header.appendChild(title);
+
+    // 保存标题元素的引用，用于更新选中状态
+    this.titleElement = title;
 
     // 创建内容区域
     const content = document.createElement('div');
@@ -345,7 +353,6 @@ window.WVE.PropertyPanel = class PropertyPanel {
     // 检查布局 Section 类是否可用
     this.logger.info('PropertyPanel: Checking layout section classes availability');
     this.logger.info('PropertyPanel: NoneLayoutSection available:', !!window.WVE.NoneLayoutSection);
-    this.logger.info('PropertyPanel: AbsoluteLayoutSection available:', !!window.WVE.AbsoluteLayoutSection);
     this.logger.info('PropertyPanel: FlexLayoutSection available:', !!window.WVE.FlexLayoutSection);
     this.logger.info('PropertyPanel: GridLayoutSection available:', !!window.WVE.GridLayoutSection);
 
@@ -360,16 +367,6 @@ window.WVE.PropertyPanel = class PropertyPanel {
       this.logger.error('PropertyPanel: Failed to create NoneLayoutSection:', error);
     }
 
-    // 绝对布局模式
-    this.logger.info('PropertyPanel: Creating absolute layout section');
-    try {
-      this.layoutSections.absolute = new window.WVE.AbsoluteLayoutSection({
-        uiManager: this.uiManager
-      });
-      this.logger.info('PropertyPanel: AbsoluteLayoutSection created successfully');
-    } catch (error) {
-      this.logger.error('PropertyPanel: Failed to create AbsoluteLayoutSection:', error);
-    }
 
     // 响应式布局模式 (Flexbox)
     this.logger.info('PropertyPanel: Creating flex layout section');
@@ -624,6 +621,9 @@ window.WVE.PropertyPanel = class PropertyPanel {
     console.log(`[PropertyPanel] updateForElement called with:`, element);
     this.currentElement = element;
 
+    // 更新标题中的选中状态指示器
+    this.updateSelectionIndicator(element);
+
     if (!element) {
       this.logger.info('No element selected, showing empty state');
       this.showEmptyState();
@@ -646,6 +646,41 @@ window.WVE.PropertyPanel = class PropertyPanel {
     this.sections.styleTabs.update(element);
 
     this.logger.debug('Updated property panel for element:', element.tagName);
+  }
+
+  /**
+   * 更新标题中的选中状态指示器
+   */
+  updateSelectionIndicator(element) {
+    if (!this.titleElement) {
+      return;
+    }
+
+    const noSelection = this.titleElement.querySelector('.no-selection');
+    const hasSelection = this.titleElement.querySelector('.has-selection');
+
+    if (element) {
+      // 有元素选中
+      if (noSelection) {
+        noSelection.style.display = 'none';
+      }
+      if (hasSelection) {
+        hasSelection.style.display = 'inline';
+        // 显示元素信息
+        const elementName = window.WVE.DOMUtils ? window.WVE.DOMUtils.shortNameOf(element) : element.tagName.toLowerCase();
+        hasSelection.textContent = `✓ ${elementName}`;
+      }
+      this.logger.info('PropertyPanel: Selection indicator updated - element selected');
+    } else {
+      // 没有元素选中
+      if (noSelection) {
+        noSelection.style.display = 'inline';
+      }
+      if (hasSelection) {
+        hasSelection.style.display = 'none';
+      }
+      this.logger.info('PropertyPanel: Selection indicator updated - no element selected');
+    }
   }
 
 
