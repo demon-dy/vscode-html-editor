@@ -17,21 +17,12 @@ window.WVE.PropertyPanel = class PropertyPanel {
 
     // 主要区域实例
     this.sections = {
-      layoutMode: null,        // 布局模式选择器
-      dynamicLayout: null,     // 动态布局区域 (根据模式变化)
+      position: null,          // 定位设置区域
+      layoutMode: null,        // 布局模式选择器（包含完整布局管理功能）
       styleTabs: null          // 样式属性标签页
     };
 
-    // 当前布局模式
-    // 注意：由于布局设计重构，不再使用单一的 currentLayoutMode
-    // 改为使用 LayoutModeSection 内部的 currentPosition 和 currentLayout
-
-    // 布局模式对应的区域
-    this.layoutSections = {
-      none: null,       // NoneLayoutSection
-      flex: null,       // FlexLayoutSection
-      grid: null        // GridLayoutSection
-    };
+    // 注意：布局功能已整合到 LayoutModeSection 中，不再需要独立的布局区域
 
     // 存储和恢复状态
     this.storageKey = `wve-property-panel:${window.wve?.codeId || 'default'}`;
@@ -39,6 +30,7 @@ window.WVE.PropertyPanel = class PropertyPanel {
       visible: true,
       layoutMode: 'none',
       sections: {
+        position: { collapsed: false },
         layoutMode: { collapsed: false },
         styleTabs: { collapsed: false }
       }
@@ -280,9 +272,30 @@ window.WVE.PropertyPanel = class PropertyPanel {
 
     // 重置区域对象
     this.sections = {};
-    this.layoutSections = {};
 
-    // 1. 创建布局模式选择器（顶部固定）
+    // 1. 创建定位设置区域（第一个位置）
+    this.logger.info('PropertyPanel: Creating position section');
+    if (window.WVE.PositionSection) {
+      this.sections.position = new window.WVE.PositionSection({
+        collapsed: this.persisted.sections.position?.collapsed || false,
+        uiManager: this.uiManager
+      });
+
+      // 监听定位变更
+      this.sections.position.onPositionChange = this.handlePositionChange.bind(this);
+
+      const positionElement = this.sections.position.createElement();
+      this.content.appendChild(positionElement);
+
+      // 添加分隔线
+      const divider0 = document.createElement('div');
+      divider0.className = 'panel-section-divider';
+      this.content.appendChild(divider0);
+    } else {
+      this.logger.warn('PositionSection class not available');
+    }
+
+    // 2. 创建布局模式选择器
     this.logger.info('PropertyPanel: Creating layout mode section');
     this.sections.layoutMode = new window.WVE.LayoutModeSection({
       collapsed: this.persisted.sections.layoutMode?.collapsed || false,
@@ -290,8 +303,6 @@ window.WVE.PropertyPanel = class PropertyPanel {
     });
 
     // 监听布局模式变更
-    // 注意：由于布局设计重构，LayoutModeSection 现在有独立的 onPositionChange 和 onLayoutChange 回调
-    this.sections.layoutMode.onPositionChange = this.handlePositionChange.bind(this);
     this.sections.layoutMode.onLayoutChange = this.handleLayoutChange.bind(this);
 
     const layoutModeElement = this.sections.layoutMode.createElement();
@@ -302,20 +313,7 @@ window.WVE.PropertyPanel = class PropertyPanel {
     divider1.className = 'panel-section-divider';
     this.content.appendChild(divider1);
 
-    // 2. 创建动态布局区域容器
-    this.dynamicLayoutArea = document.createElement('div');
-    this.dynamicLayoutArea.className = 'dynamic-layout-area';
-    this.content.appendChild(this.dynamicLayoutArea);
-
-    // 3. 创建所有布局模式对应的区域
-    this.createLayoutSections();
-
-    // 添加分隔线
-    const divider2 = document.createElement('div');
-    divider2.className = 'panel-section-divider';
-    this.content.appendChild(divider2);
-
-    // 4. 创建样式属性标签页（底部）
+    // 3. 创建样式属性标签页（底部）
     this.logger.info('PropertyPanel: Creating style tabs section');
     this.sections.styleTabs = new window.WVE.StyleTabsSection({
       collapsed: this.persisted.sections.styleTabs?.collapsed || false,
@@ -344,67 +342,6 @@ window.WVE.PropertyPanel = class PropertyPanel {
     this.logger.info('PropertyPanel: createSections completed successfully');
   }
 
-  /**
-   * 创建所有布局模式对应的区域
-   */
-  createLayoutSections() {
-    this.logger.info('PropertyPanel: createLayoutSections called');
-
-    // 检查布局 Section 类是否可用
-    this.logger.info('PropertyPanel: Checking layout section classes availability');
-    this.logger.info('PropertyPanel: NoneLayoutSection available:', !!window.WVE.NoneLayoutSection);
-    this.logger.info('PropertyPanel: FlexLayoutSection available:', !!window.WVE.FlexLayoutSection);
-    this.logger.info('PropertyPanel: GridLayoutSection available:', !!window.WVE.GridLayoutSection);
-
-    // 无布局模式
-    this.logger.info('PropertyPanel: Creating none layout section');
-    try {
-      this.layoutSections.none = new window.WVE.NoneLayoutSection({
-        uiManager: this.uiManager
-      });
-      this.logger.info('PropertyPanel: NoneLayoutSection created successfully');
-    } catch (error) {
-      this.logger.error('PropertyPanel: Failed to create NoneLayoutSection:', error);
-    }
-
-
-    // 响应式布局模式 (Flexbox)
-    this.logger.info('PropertyPanel: Creating flex layout section');
-    try {
-      this.layoutSections.flex = new window.WVE.FlexLayoutSection({
-        uiManager: this.uiManager
-      });
-      this.logger.info('PropertyPanel: FlexLayoutSection created successfully');
-    } catch (error) {
-      this.logger.error('PropertyPanel: Failed to create FlexLayoutSection:', error);
-    }
-
-    // 网格布局模式
-    this.logger.info('PropertyPanel: Creating grid layout section');
-    try {
-      this.layoutSections.grid = new window.WVE.GridLayoutSection({
-        uiManager: this.uiManager
-      });
-      this.logger.info('PropertyPanel: GridLayoutSection created successfully');
-    } catch (error) {
-      this.logger.error('PropertyPanel: Failed to create GridLayoutSection:', error);
-    }
-
-    // 将所有区域元素添加到动态区域中，但默认隐藏
-    this.logger.info('PropertyPanel: Adding layout section elements to dynamic area');
-    Object.values(this.layoutSections).forEach((section, index) => {
-      this.logger.info(`PropertyPanel: Processing layout section ${index + 1}`);
-      const element = section.createElement();
-      element.style.display = 'none';
-      this.dynamicLayoutArea.appendChild(element);
-    });
-    this.logger.info('PropertyPanel: All layout sections created and added');
-
-    // 显示默认布局模式
-    // 注意：由于布局设计重构，改为显示默认的 'none' 布局模式
-    this.logger.info('PropertyPanel: Showing default layout mode: none');
-    this.showLayoutMode('none');
-  }
 
   /**
    * 处理定位类型变更
@@ -430,10 +367,7 @@ window.WVE.PropertyPanel = class PropertyPanel {
       element
     });
 
-    // 显示对应的布局区域
-    this.showLayoutMode(newLayout);
-
-    // 持久化状态
+    // 布局功能已整合到 LayoutModeSection 中，这里只需要持久化状态
     this.saveState({ layoutMode: newLayout });
 
     this.logger.info('PropertyPanel: Layout change handled successfully:', newLayout);
@@ -448,63 +382,6 @@ window.WVE.PropertyPanel = class PropertyPanel {
     // 处理来自 wveLayoutChange 事件
     if (event && event.detail && event.detail.newLayout) {
       this.handleLayoutChange(event.detail.newLayout, event.detail.prevLayout, event.detail.element);
-    }
-  }
-
-  /**
-   * 显示指定的布局模式区域
-   */
-  showLayoutMode(mode) {
-    console.log(`[PropertyPanel] showLayoutMode called with mode: ${mode}`);
-    console.log(`[PropertyPanel] Available layout sections:`, Object.keys(this.layoutSections));
-
-    // 隐藏所有布局区域
-    Object.values(this.layoutSections).forEach((section, index) => {
-      console.log(`[PropertyPanel] Hiding section ${index}:`, section ? 'exists' : 'null', section?.element ? 'has element' : 'no element');
-      if (section && section.element) {
-        section.element.style.display = 'none';
-      }
-    });
-
-    // 显示当前模式的区域
-    const currentSection = this.layoutSections[mode];
-    console.log(`[PropertyPanel] Target section for mode ${mode}:`, currentSection ? 'exists' : 'null');
-    console.log(`[PropertyPanel] Target section has element:`, currentSection?.element ? 'yes' : 'no');
-
-    if (currentSection && currentSection.element) {
-      console.log(`[PropertyPanel] Showing ${mode} layout section`);
-      currentSection.element.style.display = 'block';
-
-      // 如果有当前元素，更新该区域
-      if (this.currentElement) {
-        console.log(`[PropertyPanel] Updating ${mode} section with current element`);
-        currentSection.update(this.currentElement);
-      }
-    } else {
-      console.warn(`[PropertyPanel] Cannot show ${mode} layout section - section or element missing`);
-    }
-  }
-
-  /**
-   * 更新当前布局区域的元素
-   */
-  updateCurrentLayoutSection() {
-    this.logger.info('PropertyPanel: updateCurrentLayoutSection called');
-
-    // 注意：由于布局设计重构，改为从 LayoutModeSection 获取当前布局
-    const currentLayout = this.sections.layoutMode.getCurrentLayout();
-    this.logger.info('PropertyPanel: Current layout mode:', currentLayout);
-    this.logger.info('PropertyPanel: Available layout sections:', Object.keys(this.layoutSections));
-
-    const currentSection = this.layoutSections[currentLayout];
-    this.logger.info('PropertyPanel: Current section exists:', !!currentSection);
-    this.logger.info('PropertyPanel: Current element exists:', !!this.currentElement);
-
-    if (currentSection && this.currentElement) {
-      this.logger.info('PropertyPanel: Updating current layout section with element');
-      currentSection.update(this.currentElement);
-    } else {
-      this.logger.warn('PropertyPanel: Cannot update layout section - missing section or element');
     }
   }
 
@@ -633,12 +510,17 @@ window.WVE.PropertyPanel = class PropertyPanel {
     this.logger.info('Element selected, hiding empty state');
     this.hideEmptyState();
 
-    // 传递当前元素给布局模式选择器
+    // 首先更新定位设置区域
+    if (this.sections.position) {
+      console.log(`[PropertyPanel] Updating position section with element`);
+      this.sections.position.update(element);
+    }
+
+    // 传递当前元素给布局模式选择器（包含完整布局管理功能）
     console.log(`[PropertyPanel] Updating layout mode section with element`);
     this.sections.layoutMode.update(element);
 
-    // 注意：由于新的布局设计分离了定位和布局，不再需要自动检测和设置模式
-    // LayoutModeSection.update() 方法会自动检测并更新定位类型和布局方式
+    // LayoutModeSection 现在包含完整的布局管理功能，会自动处理所有布局相关设置
     this.logger.info('PropertyPanel: Layout section updated via update() method');
 
     // 更新样式属性标签页
@@ -827,8 +709,8 @@ window.WVE.PropertyPanel = class PropertyPanel {
    * 获取当前布局模式
    */
   getCurrentLayoutMode() {
-    // 注意：由于布局设计重构，改为从 LayoutModeSection 获取当前布局
-    return this.sections.layoutMode.getCurrentLayout();
+    // 从 LayoutModeSection 获取当前布局模式
+    return this.sections.layoutMode?.getCurrentLayout() || 'none';
   }
 
   /**
@@ -858,12 +740,6 @@ window.WVE.PropertyPanel = class PropertyPanel {
       }
     });
 
-    Object.values(this.layoutSections).forEach(section => {
-      if (section && section.destroy) {
-        section.destroy();
-      }
-    });
-
     // 移除面板元素
     if (this.panel && this.panel.parentNode) {
       this.panel.parentNode.removeChild(this.panel);
@@ -872,7 +748,6 @@ window.WVE.PropertyPanel = class PropertyPanel {
     this.panel = null;
     this.content = null;
     this.sections = {};
-    this.layoutSections = {};
     this.currentElement = null;
 
     this.logger.info('New property panel destroyed');

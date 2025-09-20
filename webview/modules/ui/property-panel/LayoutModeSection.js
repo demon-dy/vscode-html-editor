@@ -1,7 +1,6 @@
 /**
- * 布局模式选择器 - 定位类型 + 布局方式分离设计
- * 顶部：定位类型选择（相对|绝对|固定|粘性）
- * 下方：布局方式选择（无布局|自动布局|网格布局）
+ * 布局模式选择器 - 整合所有布局相关设置的综合面板
+ * 包含：布局方式选择、尺寸设置、布局参数、内外边距等
  */
 window.WVE = window.WVE || {};
 window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.PropertySectionBase {
@@ -14,16 +13,7 @@ window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.Proper
     });
 
     this.currentElement = null;
-    this.currentPosition = 'static'; // static, relative, absolute, fixed, sticky
     this.currentLayout = 'none'; // none, flex, grid
-
-    // 位置值状态
-    this.positionValues = {
-      top: '',
-      right: '',
-      bottom: '',
-      left: ''
-    };
 
     // 防抖同步机制
     this.syncDebounceTimer = null;
@@ -31,35 +21,6 @@ window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.Proper
 
     // 初始化 LayoutAdapter
     this.layoutAdapter = new window.WVE.LayoutAdapter();
-
-    // 定位类型定义
-    this.positionTypes = {
-      static: {
-        name: '静态',
-        icon: 'file-text',
-        description: '默认定位，跟随文档流'
-      },
-      relative: {
-        name: '相对',
-        icon: 'move-3d',
-        description: '相对于自身位置定位'
-      },
-      absolute: {
-        name: '绝对',
-        icon: 'move',
-        description: '相对于最近定位祖先元素定位'
-      },
-      fixed: {
-        name: '固定',
-        icon: 'pin',
-        description: '相对于视口固定定位'
-      },
-      sticky: {
-        name: '粘性',
-        icon: 'sticky-note',
-        description: '粘性定位，结合相对和固定'
-      }
-    };
 
     // 布局方式定义
     this.layoutTypes = {
@@ -80,15 +41,56 @@ window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.Proper
       }
     };
 
-    this.onPositionChange = null; // 定位变更回调
-    this.onLayoutChange = null; // 布局变更回调
+    // 尺寸设置状态
+    this.dimensions = {
+      width: '',
+      height: '',
+      minWidth: '',
+      minHeight: '',
+      maxWidth: '',
+      maxHeight: ''
+    };
 
-    // 选择状态保护相关
-    this.preservedSelection = null; // 保存的选择状态
-    this.restoreAttemptTimers = []; // 恢复尝试的定时器数组
-    this.selectionRestoreListener = null; // 选择恢复监听器
-    this.domObserver = null; // DOM变化观察器
-    this.continuousMonitorInterval = null; // 持续监控间隔器
+    // 内外边距状态
+    this.spacing = {
+      margin: { top: '', right: '', bottom: '', left: '', unified: true },
+      padding: { top: '', right: '', bottom: '', left: '', unified: true }
+    };
+
+    // 布局特定参数
+    this.layoutParams = {
+      flex: {
+        direction: 'row',
+        wrap: 'nowrap',
+        justifyContent: 'flex-start',
+        alignItems: 'stretch',
+        gap: ''
+      },
+      grid: {
+        templateColumns: '',
+        templateRows: '',
+        gap: '',
+        justifyItems: 'stretch',
+        alignItems: 'stretch'
+      }
+    };
+
+    // UI状态
+    this.uiState = {
+      dimensionsExpanded: false,
+      spacingExpanded: false,
+      clipContent: false,
+      clipExpanded: false
+    };
+
+    // 裁剪选项
+    this.clipOptions = {
+      mode: 'none', // 'none', 'all', 'horizontal', 'vertical'
+      horizontal: false,
+      vertical: false
+    };
+
+    this.onLayoutChange = null; // 布局变更回调
   }
 
   /**
@@ -98,166 +100,138 @@ window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.Proper
     const element = super.createElement();
 
     // 在元素创建完成后注入样式到 Shadow DOM
-    this.injectStyles();
+    // 使用 setTimeout 确保元素完全初始化后再注入样式
+    setTimeout(() => {
+      this.injectStyles();
+    }, 0);
 
     return element;
+  }
+
+  /**
+   * 注入样式到 Shadow DOM
+   */
+  injectStyles() {
+    // 避免重复注入样式
+    if (this.element && this.element.querySelector('#layout-mode-section-styles')) {
+      return;
+    }
+
+    const style = document.createElement('style');
+    style.id = 'layout-mode-section-styles';
+    style.textContent = `
+      .layout-mode-section .section-content {
+        padding: 12px;
+      }
+
+      /* 尺寸输入框样式，参考 PositionSection */
+      .dimension-input-group {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+
+      .dimension-input-label {
+        font-size: 10px;
+        color: #cccccc;
+        font-weight: 500;
+      }
+
+      .dimension-input-container {
+        display: flex;
+        align-items: center;
+        background: #1e1e1e;
+        border: 1px solid #404040;
+        border-radius: 3px;
+        overflow: hidden;
+        height: 22px;
+      }
+
+      .dimension-input {
+        flex: 1;
+        height: 100%;
+        background: transparent;
+        border: none;
+        color: #ffffff;
+        font-size: 10px;
+        padding: 0 6px;
+        outline: none;
+        min-width: 0;
+      }
+
+      .dimension-input::placeholder {
+        color: #666666;
+      }
+
+      .dimension-unit-select {
+        height: 100%;
+        background: #2c2c2c;
+        border: none;
+        border-left: 1px solid #404040;
+        color: #cccccc;
+        font-size: 9px;
+        padding: 0 6px;
+        outline: none;
+        cursor: pointer;
+        flex-shrink: 0;
+        min-width: 40px;
+      }
+
+      .dimension-auto-btn {
+        height: 100%;
+        background: #2c2c2c;
+        border: none;
+        border-left: 1px solid #404040;
+        color: #666666;
+        padding: 0 6px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        min-width: 28px;
+      }
+
+      .dimension-auto-btn:hover {
+        color: #ffffff;
+        background: #3c3c3c;
+      }
+
+      /* 通用样式 */
+      .section-title {
+        font-size: 11px;
+        font-weight: 600;
+        color: #ffffff;
+        margin-bottom: 8px;
+      }
+    `;
+
+    // 注入到当前元素内部，确保样式能够生效
+    if (this.element) {
+      this.element.appendChild(style);
+    } else {
+      // 如果还没有元素，添加到 head
+      document.head.appendChild(style);
+    }
   }
 
   createContentElements(container) {
     container.innerHTML = '';
 
-    // 创建定位类型选择器
-    this.createPositionSelector(container);
-
-    // 创建位置设置控件
-    this.createPositionValues(container);
-
-    // 创建分隔线
-    this.createDivider(container);
-
-    // 创建布局方式选择器
+    // 1. 布局方式选择器
     this.createLayoutSelector(container);
 
-    // 创建当前设置说明
-    this.createSettingsDescription(container);
+    // 2. 尺寸设置区域
+    this.createDimensionsSection(container);
+
+    // 3. 布局特定参数区域
+    this.createLayoutParamsSection(container);
+
+    // 4. 内外边距设置区域
+    this.createSpacingSection(container);
 
     // 初始化 Lucide 图标
     setTimeout(() => this.initializeLucideIcons(container), 0);
-  }
-
-  createPositionSelector(container) {
-    const sectionContainer = document.createElement('div');
-    sectionContainer.className = 'position-selector-container';
-
-    // 标题
-    const title = document.createElement('div');
-    title.className = 'section-title';
-    title.textContent = '定位类型 Position';
-
-    // 定位类型按钮组
-    const positionsContainer = document.createElement('div');
-    positionsContainer.className = 'flex bg-[#2c2c2c] rounded gap-1 p-1 border border-[#3d3d3d] mb-2';
-
-    Object.entries(this.positionTypes).forEach(([key, position]) => {
-      const button = this.createPositionButton(key, position);
-      positionsContainer.appendChild(button);
-    });
-
-    sectionContainer.appendChild(title);
-    sectionContainer.appendChild(positionsContainer);
-    container.appendChild(sectionContainer);
-  }
-
-  createPositionValues(container) {
-    const sectionContainer = document.createElement('div');
-    sectionContainer.className = 'position-values-container';
-
-    // 标题
-    const title = document.createElement('div');
-    title.className = 'section-title';
-    title.textContent = '位置设置 Position Values';
-
-    // 位置控件网格容器
-    const valuesGrid = document.createElement('div');
-    valuesGrid.className = 'position-values-grid';
-
-    // 创建四个方向的输入控件
-    const directions = [
-      { key: 'top', label: '上', icon: 'arrow-up' },
-      { key: 'right', label: '右', icon: 'arrow-right' },
-      { key: 'bottom', label: '下', icon: 'arrow-down' },
-      { key: 'left', label: '左', icon: 'arrow-left' }
-    ];
-
-    directions.forEach(direction => {
-      const inputGroup = this.createPositionInput(direction);
-      valuesGrid.appendChild(inputGroup);
-    });
-
-    // 快捷值按钮
-    const quickValues = document.createElement('div');
-    quickValues.className = 'position-quick-values';
-
-    const quickButtons = [
-      { label: 'Auto', value: 'auto' },
-      { label: '0', value: '0px' },
-      { label: '50%', value: '50%' },
-      { label: 'Clear', value: '' }
-    ];
-
-    quickButtons.forEach(btn => {
-      const button = document.createElement('button');
-      button.className = 'quick-value-btn';
-      button.textContent = btn.label;
-      button.onclick = () => this.applyQuickValue(btn.value);
-      quickValues.appendChild(button);
-    });
-
-    sectionContainer.appendChild(title);
-    sectionContainer.appendChild(valuesGrid);
-    sectionContainer.appendChild(quickValues);
-    container.appendChild(sectionContainer);
-
-    // 保存容器引用用于显示/隐藏
-    this.positionValuesContainer = sectionContainer;
-
-    // 初始状态：static 时隐藏
-    this.updatePositionValuesVisibility();
-  }
-
-  createPositionInput(direction) {
-    const group = document.createElement('div');
-    group.className = 'position-input-group';
-
-    // 图标和标签
-    const label = document.createElement('div');
-    label.className = 'position-input-label';
-    label.innerHTML = `
-      <i data-lucide="${direction.icon}" class="position-icon w-4 h-4"></i>
-      <span class="position-label-text">${direction.label}</span>
-    `;
-
-    // 输入控件容器
-    const inputContainer = document.createElement('div');
-    inputContainer.className = 'position-input-container';
-
-    // 数值输入框
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.className = 'position-input';
-    input.placeholder = 'auto';
-    input.dataset.direction = direction.key;
-    input.addEventListener('change', (e) => {
-      this.updatePositionValue(direction.key, e.target.value);
-    });
-
-    // 单位选择器
-    const unitSelect = document.createElement('select');
-    unitSelect.className = 'position-unit-select';
-    const units = ['px', '%', 'em', 'rem', 'vw', 'vh'];
-    units.forEach(unit => {
-      const option = document.createElement('option');
-      option.value = unit;
-      option.textContent = unit;
-      unitSelect.appendChild(option);
-    });
-    unitSelect.addEventListener('change', (e) => {
-      this.updatePositionValue(direction.key, input.value, e.target.value);
-    });
-
-    inputContainer.appendChild(input);
-    inputContainer.appendChild(unitSelect);
-
-    group.appendChild(label);
-    group.appendChild(inputContainer);
-
-    // 保存输入控件引用
-    if (!this.positionInputs) {
-      this.positionInputs = {};
-    }
-    this.positionInputs[direction.key] = { input, unitSelect };
-
-    return group;
   }
 
   createLayoutSelector(container) {
@@ -271,7 +245,7 @@ window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.Proper
 
     // 布局方式按钮组
     const layoutsContainer = document.createElement('div');
-    layoutsContainer.className = 'flex bg-[#2c2c2c] rounded gap-1 p-1 border border-[#3d3d3d] mb-2';
+    layoutsContainer.className = 'flex bg-[#2c2c2c] rounded gap-1 p-1 border border-[#3d3d3d] mb-3';
 
     Object.entries(this.layoutTypes).forEach(([key, layout]) => {
       const button = this.createLayoutButton(key, layout);
@@ -283,31 +257,409 @@ window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.Proper
     container.appendChild(sectionContainer);
   }
 
-  createDivider(container) {
-    const divider = document.createElement('div');
-    divider.className = 'divider';
-    container.appendChild(divider);
+  createDimensionsSection(container) {
+    const section = document.createElement('div');
+    section.className = 'dimensions-section mb-4';
+
+    // 标题行
+    const titleRow = document.createElement('div');
+    titleRow.className = 'flex items-center justify-between mb-2';
+
+    const title = document.createElement('div');
+    title.className = 'section-title mb-0';
+    title.textContent = '尺寸设置 Resizing';
+
+    const moreBtn = document.createElement('button');
+    moreBtn.className = 'text-xs text-gray-400 hover:text-white transition-colors';
+    moreBtn.textContent = this.uiState.dimensionsExpanded ? '收起' : '更多';
+    moreBtn.onclick = () => this.toggleDimensionsExpanded();
+
+    titleRow.appendChild(title);
+    titleRow.appendChild(moreBtn);
+
+    // 基础尺寸设置
+    const basicDimensions = document.createElement('div');
+    basicDimensions.className = 'basic-dimensions grid grid-cols-2 gap-2 mb-2';
+
+    // 宽度设置
+    const widthGroup = this.createDimensionInput('width', '宽度', 'auto');
+    basicDimensions.appendChild(widthGroup);
+
+    // 高度设置
+    const heightGroup = this.createDimensionInput('height', '高度', 'auto');
+    basicDimensions.appendChild(heightGroup);
+
+    // 扩展尺寸设置（最大最小值）
+    const extendedDimensions = document.createElement('div');
+    extendedDimensions.className = 'extended-dimensions';
+    extendedDimensions.style.display = this.uiState.dimensionsExpanded ? 'block' : 'none';
+
+    // 最小尺寸
+    // const minTitle = document.createElement('div');
+    // minTitle.className = 'text-xs text-gray-400 mb-1 mt-2';
+    // minTitle.textContent = '最小尺寸';
+    // extendedDimensions.appendChild(minTitle);
+
+    const minDimensions = document.createElement('div');
+    minDimensions.className = 'grid grid-cols-2 gap-2 mb-2';
+
+    const minWidthGroup = this.createDimensionInput('minWidth', '最小宽度', 'Min W');
+    const minHeightGroup = this.createDimensionInput('minHeight', '最小高度', 'Min H');
+    minDimensions.appendChild(minWidthGroup);
+    minDimensions.appendChild(minHeightGroup);
+    extendedDimensions.appendChild(minDimensions);
+
+    // 最大尺寸
+    // const maxTitle = document.createElement('div');
+    // maxTitle.className = 'text-xs text-gray-400 mb-1';
+    // maxTitle.textContent = '最大尺寸';
+    // extendedDimensions.appendChild(maxTitle);
+
+    const maxDimensions = document.createElement('div');
+    maxDimensions.className = 'grid grid-cols-2 gap-2';
+
+    const maxWidthGroup = this.createDimensionInput('maxWidth', '最大宽度', 'Max W');
+    const maxHeightGroup = this.createDimensionInput('maxHeight', '最大高度', 'Max H');
+    maxDimensions.appendChild(maxWidthGroup);
+    maxDimensions.appendChild(maxHeightGroup);
+    extendedDimensions.appendChild(maxDimensions);
+
+    section.appendChild(titleRow);
+    section.appendChild(basicDimensions);
+    section.appendChild(extendedDimensions);
+    container.appendChild(section);
+
+    // 保存引用
+    this.dimensionsMoreBtn = moreBtn;
+    this.extendedDimensionsContainer = extendedDimensions;
   }
 
-  createPositionButton(positionKey, position) {
-    const button = document.createElement('div');
-    button.className = 'flex items-center justify-center w-8 h-8 rounded text-gray-400 hover:text-white hover:bg-[#3d3d3d] transition-all duration-200 cursor-pointer';
-    button.dataset.position = positionKey;
-    button.title = `${position.name} - ${position.description}`;
+  createLayoutParamsSection(container) {
+    this.layoutParamsContainer = document.createElement('div');
+    this.layoutParamsContainer.className = 'layout-params-section mb-4';
 
-    // 图标 - 使用 Lucide 图标
-    const icon = document.createElement('i');
-    icon.className = 'w-4 h-4';
-    icon.setAttribute('data-lucide', position.icon);
+    container.appendChild(this.layoutParamsContainer);
 
-    button.appendChild(icon);
+    // 初始化时根据当前布局显示对应参数
+    this.updateLayoutParams();
+  }
 
-    // 点击事件
-    button.addEventListener('click', () => {
-      this.selectPosition(positionKey);
+  createSpacingSection(container) {
+    const section = document.createElement('div');
+    section.className = 'spacing-section mb-4';
+
+    // 标题行
+    const titleRow = document.createElement('div');
+    titleRow.className = 'flex items-center justify-between mb-2';
+
+    const title = document.createElement('div');
+    title.className = 'section-title mb-0';
+    title.textContent = '内外边距 Spacing';
+
+    const moreBtn = document.createElement('button');
+    moreBtn.className = 'text-xs text-gray-400 hover:text-white transition-colors';
+    moreBtn.textContent = this.uiState.spacingExpanded ? '收起' : '更多';
+    moreBtn.onclick = () => this.toggleSpacingExpanded();
+
+    titleRow.appendChild(title);
+    titleRow.appendChild(moreBtn);
+
+    // 基础间距设置（统一设置）
+    const basicSpacing = document.createElement('div');
+    basicSpacing.className = 'basic-spacing grid grid-cols-2 gap-2 mb-2';
+
+    // 外边距
+    const marginGroup = this.createSpacingInput('margin', '外边距', 'M');
+    basicSpacing.appendChild(marginGroup);
+
+    // 内边距
+    const paddingGroup = this.createSpacingInput('padding', '内边距', 'P');
+    basicSpacing.appendChild(paddingGroup);
+
+    // 扩展间距设置（单独设置每个方向）
+    const extendedSpacing = document.createElement('div');
+    extendedSpacing.className = 'extended-spacing';
+    extendedSpacing.style.display = this.uiState.spacingExpanded ? 'block' : 'none';
+
+    // 详细外边距设置
+    extendedSpacing.appendChild(this.createDetailedSpacingSection('margin', '外边距详细设置'));
+
+    // 详细内边距设置
+    extendedSpacing.appendChild(this.createDetailedSpacingSection('padding', '内边距详细设置'));
+
+    // 溢出裁剪设置
+    const clipSection = document.createElement('div');
+    clipSection.className = 'clip-section mt-3 pt-2 border-t border-gray-600';
+
+    // 标题行（带更多按钮）
+    const clipTitleRow = document.createElement('div');
+    clipTitleRow.className = 'flex items-center justify-between mb-2';
+
+    const clipCheckbox = document.createElement('label');
+    clipCheckbox.className = 'flex items-center gap-2 text-xs text-gray-300 cursor-pointer';
+
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.className = 'w-3 h-3';
+    checkbox.checked = this.uiState.clipContent;
+    checkbox.addEventListener('change', (e) => this.toggleClipContent(e.target.checked));
+
+    const checkText = document.createElement('span');
+    checkText.textContent = '裁剪溢出内容';
+
+    clipCheckbox.appendChild(checkbox);
+    clipCheckbox.appendChild(checkText);
+
+    const clipMoreBtn = document.createElement('button');
+    clipMoreBtn.className = 'text-xs text-gray-400 hover:text-white transition-colors';
+    clipMoreBtn.textContent = this.uiState.clipExpanded ? '收起' : '更多';
+    clipMoreBtn.addEventListener('click', () => this.toggleClipExpanded());
+
+    clipTitleRow.appendChild(clipCheckbox);
+    clipTitleRow.appendChild(clipMoreBtn);
+
+    // 扩展裁剪选项
+    const extendedClip = document.createElement('div');
+    extendedClip.className = 'extended-clip';
+    extendedClip.style.display = this.uiState.clipExpanded ? 'block' : 'none';
+
+    // 裁剪模式选择
+    const clipModeGroup = document.createElement('div');
+    clipModeGroup.className = 'clip-mode-group mt-2';
+
+    const clipModeTitle = document.createElement('div');
+    clipModeTitle.className = 'text-xs text-gray-400 mb-2';
+    clipModeTitle.textContent = '裁剪模式';
+
+    const clipModeOptions = document.createElement('div');
+    clipModeOptions.className = 'grid grid-cols-2 gap-2';
+
+    const clipModes = [
+      { key: 'all', label: '全裁剪', value: 'hidden' },
+      { key: 'horizontal', label: '横向裁剪', value: 'hidden auto' },
+      { key: 'vertical', label: '纵向裁剪', value: 'auto hidden' },
+      { key: 'none', label: '不裁剪', value: 'visible' }
+    ];
+
+    clipModes.forEach(mode => {
+      const modeBtn = document.createElement('button');
+      modeBtn.className = this.clipOptions.mode === mode.key
+        ? 'clip-mode-btn active text-xs px-2 py-1 bg-blue-600 text-white rounded'
+        : 'clip-mode-btn text-xs px-2 py-1 bg-gray-700 text-gray-300 hover:bg-gray-600 rounded transition-colors';
+      modeBtn.textContent = mode.label;
+      modeBtn.setAttribute('data-clip-mode', mode.key);
+      modeBtn.addEventListener('click', () => this.setClipMode(mode.key, mode.value));
+      clipModeOptions.appendChild(modeBtn);
     });
 
-    return button;
+    clipModeGroup.appendChild(clipModeTitle);
+    clipModeGroup.appendChild(clipModeOptions);
+    extendedClip.appendChild(clipModeGroup);
+
+    clipSection.appendChild(clipTitleRow);
+    clipSection.appendChild(extendedClip);
+
+    section.appendChild(titleRow);
+    section.appendChild(basicSpacing);
+    section.appendChild(extendedSpacing);
+    section.appendChild(clipSection);
+    container.appendChild(section);
+
+    // 保存引用
+    this.spacingMoreBtn = moreBtn;
+    this.extendedSpacingContainer = extendedSpacing;
+    this.clipCheckbox = checkbox;
+    this.clipMoreBtn = clipMoreBtn;
+    this.extendedClipContainer = extendedClip;
+  }
+
+  createDimensionInput(type, label, placeholder) {
+    const group = document.createElement('div');
+    group.className = 'flex flex-col gap-1';
+    group.style.maxWidth = '100%';
+    group.style.minWidth = '0';
+
+    const labelEl = document.createElement('div');
+    labelEl.className = 'text-xs text-gray-400 font-medium';
+    labelEl.textContent = label;
+
+    const inputContainer = document.createElement('div');
+    inputContainer.className = 'position-input-container';
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    // input.className = 'flex-1 bg-transparent border-0 text-white text-xs outline-0';
+    input.className = 'position-input';
+    input.placeholder = placeholder;
+    input.value = this.dimensions[type] || '';
+    input.setAttribute('data-dimension', type); // 添加 data 属性用于查找
+    input.addEventListener('change', (e) => this.updateDimension(type, e.target.value));
+
+    const unitSelect = document.createElement('select');
+    unitSelect.className = 'position-unit-select';
+    unitSelect.setAttribute('data-dimension-unit', type); // 添加 data 属性用于查找
+
+    const units = ['px', '%', 'em', 'rem', 'vw', 'vh', 'auto'];
+    units.forEach(unit => {
+      const option = document.createElement('option');
+      option.value = unit;
+      option.textContent = unit;
+      unitSelect.appendChild(option);
+    });
+
+    unitSelect.addEventListener('change', (e) => this.updateDimensionUnit(type, input.value, e.target.value));
+
+    inputContainer.appendChild(input);
+    inputContainer.appendChild(unitSelect);
+
+    // 自适应按钮（对于支持的属性）
+    if (this.supportsAutoWidth(type)) {
+      const autoBtn = document.createElement('button');
+      autoBtn.className = 'bg-[#2c2c2c] border-0 text-[#666666] hover:text-white hover:bg-[#3c3c3c] cursor-pointer flex items-center justify-center transition-colors';
+      autoBtn.style.height = '100%';
+      autoBtn.style.borderLeft = '1px solid #404040';
+      autoBtn.style.padding = '0 6px';
+      autoBtn.style.flexShrink = '0';
+      autoBtn.style.minWidth = '28px';
+      autoBtn.innerHTML = '<i data-lucide="maximize-2" class="w-3 h-3"></i>';
+      autoBtn.title = '自适应';
+      autoBtn.addEventListener('click', () => this.setDimensionAuto(type));
+      inputContainer.appendChild(autoBtn);
+    }
+
+    group.appendChild(labelEl);
+    group.appendChild(inputContainer);
+
+    return group;
+  }
+
+  createSpacingInput(type, label, placeholder) {
+    const group = document.createElement('div');
+    group.className = 'flex flex-col gap-1';
+    group.style.maxWidth = '100%';
+    group.style.minWidth = '0';
+
+    const labelEl = document.createElement('div');
+    labelEl.className = 'text-xs text-gray-400 font-medium';
+    labelEl.textContent = label;
+
+    const inputContainer = document.createElement('div');
+    inputContainer.className = 'position-input-container';
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'position-input';
+    input.placeholder = placeholder;
+    input.setAttribute('data-spacing', type); // 添加 data 属性用于查找
+    input.addEventListener('change', (e) => this.updateSpacing(type, e.target.value, true));
+
+    const unitSelect = document.createElement('select');
+    unitSelect.className = 'position-unit-select';
+    unitSelect.setAttribute('data-spacing-unit', type); // 添加 data 属性用于查找
+
+    const units = ['px', 'em', 'rem', '%', 'vw', 'vh'];
+    units.forEach(unit => {
+      const option = document.createElement('option');
+      option.value = unit;
+      option.textContent = unit;
+      unitSelect.appendChild(option);
+    });
+
+    unitSelect.addEventListener('change', (e) => this.updateSpacingUnit(type, input.value, e.target.value));
+
+    inputContainer.appendChild(input);
+    inputContainer.appendChild(unitSelect);
+
+    group.appendChild(labelEl);
+    group.appendChild(inputContainer);
+
+    return group;
+  }
+
+  createDetailedSpacingSection(type, title) {
+    const section = document.createElement('div');
+    section.className = 'detailed-spacing-section mt-3';
+
+    const sectionTitle = document.createElement('div');
+    sectionTitle.className = 'text-xs text-gray-400 mb-2';
+    sectionTitle.textContent = title;
+
+    const grid = document.createElement('div');
+    grid.className = 'grid grid-cols-2 gap-2';
+
+    const directions = [
+      { key: 'top', label: '上' },
+      { key: 'right', label: '右' },
+      { key: 'bottom', label: '下' },
+      { key: 'left', label: '左' }
+    ];
+
+    directions.forEach(direction => {
+      const input = this.createDirectionalSpacingInput(type, direction.key, direction.label);
+      grid.appendChild(input);
+    });
+
+    section.appendChild(sectionTitle);
+    section.appendChild(grid);
+
+    return section;
+  }
+
+  createDirectionalSpacingInput(type, direction, label) {
+    const group = document.createElement('div');
+    group.className = 'flex flex-col gap-1';
+    group.style.maxWidth = '100%';
+    group.style.minWidth = '0';
+
+    const labelEl = document.createElement('div');
+    labelEl.className = 'text-xs text-gray-400 font-medium';
+    labelEl.textContent = label;
+
+    const inputContainer = document.createElement('div');
+    inputContainer.className = 'flex items-center bg-[#1e1e1e] overflow-hidden';
+    inputContainer.style.height = '22px';
+    inputContainer.style.width = '100%';
+    inputContainer.style.maxWidth = '100%';
+    inputContainer.style.border = '1px solid #404040';
+    inputContainer.style.borderRadius = '3px';
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'flex-1 bg-transparent border-0 text-white text-xs outline-0';
+    input.style.height = '100%';
+    input.style.padding = '0 6px';
+    input.style.minWidth = '0';
+    input.placeholder = '0';
+    input.value = this.spacing[type][direction] || '';
+    input.setAttribute('data-directional-spacing', `${type}-${direction}`); // 添加 data 属性用于查找
+    input.addEventListener('change', (e) => this.updateDirectionalSpacing(type, direction, e.target.value));
+
+    const unitSelect = document.createElement('select');
+    unitSelect.className = 'bg-[#2c2c2c] border-0 text-[#cccccc] text-xs outline-0 cursor-pointer';
+    unitSelect.style.height = '100%';
+    unitSelect.style.borderLeft = '1px solid #404040';
+    unitSelect.style.padding = '0 6px';
+    unitSelect.style.flexShrink = '0';
+    unitSelect.style.minWidth = '40px';
+    unitSelect.setAttribute('data-directional-spacing-unit', `${type}-${direction}`); // 添加 data 属性用于查找
+
+    const units = ['px', 'em', 'rem', '%', 'vw', 'vh'];
+    units.forEach(unit => {
+      const option = document.createElement('option');
+      option.value = unit;
+      option.textContent = unit;
+      unitSelect.appendChild(option);
+    });
+
+    unitSelect.addEventListener('change', (e) => this.updateDirectionalSpacingUnit(type, direction, input.value, e.target.value));
+
+    inputContainer.appendChild(input);
+    inputContainer.appendChild(unitSelect);
+
+    group.appendChild(labelEl);
+    group.appendChild(inputContainer);
+
+    return group;
   }
 
   createLayoutButton(layoutKey, layout) {
@@ -331,521 +683,327 @@ window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.Proper
     return button;
   }
 
-  createSettingsDescription(container) {
-    const descContainer = document.createElement('div');
-    descContainer.className = 'settings-description-container';
+  // 布局特定参数UI创建方法
+  createFlexParams() {
+    const container = document.createElement('div');
+    container.className = 'flex-params-container';
 
-    // 当前选择说明
-    this.currentSettingsDesc = document.createElement('div');
-    this.currentSettingsDesc.className = 'current-settings-desc';
-    this.updateSettingsDescription();
+    const title = document.createElement('div');
+    title.className = 'section-title mb-2';
+    title.textContent = 'Flex 布局参数';
 
-    descContainer.appendChild(this.currentSettingsDesc);
-    container.appendChild(descContainer);
+    // 方向选择
+    const directionGroup = this.createParamGroup('方向', [
+      { value: 'row', label: '水平', icon: 'arrow-right' },
+      { value: 'column', label: '垂直', icon: 'arrow-down' }
+    ], this.layoutParams.flex.direction, (value) => this.updateFlexParam('direction', value));
+
+    // 主轴对齐
+    const justifyGroup = this.createParamGroup('主轴对齐', [
+      { value: 'flex-start', label: '开始', icon: 'align-left' },
+      { value: 'center', label: '居中', icon: 'align-center' },
+      { value: 'flex-end', label: '结束', icon: 'align-right' },
+      { value: 'space-between', label: '两端', icon: 'space-between-horizontal' }
+    ], this.layoutParams.flex.justifyContent, (value) => this.updateFlexParam('justifyContent', value));
+
+    // 交叉轴对齐
+    const alignGroup = this.createParamGroup('交叉轴对齐', [
+      { value: 'stretch', label: '拉伸', icon: 'maximize' },
+      { value: 'flex-start', label: '开始', icon: 'align-start-vertical' },
+      { value: 'center', label: '居中', icon: 'align-center-vertical' },
+      { value: 'flex-end', label: '结束', icon: 'align-end-vertical' }
+    ], this.layoutParams.flex.alignItems, (value) => this.updateFlexParam('alignItems', value));
+
+    // 间距设置
+    const gapInput = this.createGapInput('gap', '间距', this.layoutParams.flex.gap, (value) => this.updateFlexParam('gap', value));
+
+    container.appendChild(title);
+    container.appendChild(directionGroup);
+    container.appendChild(justifyGroup);
+    container.appendChild(alignGroup);
+    container.appendChild(gapInput);
+
+    return container;
   }
 
-  updateSettingsDescription() {
-    if (!this.currentSettingsDesc) {
-      return;
-    }
+  createGridParams() {
+    const container = document.createElement('div');
+    container.className = 'grid-params-container';
 
-    const position = this.positionTypes[this.currentPosition];
-    const layout = this.layoutTypes[this.currentLayout];
+    const title = document.createElement('div');
+    title.className = 'section-title mb-2';
+    title.textContent = 'Grid 布局参数';
 
-    if (position && layout) {
-      this.currentSettingsDesc.innerHTML = `
-        <div class="settings-desc-row">
-          <span class="settings-desc-label">定位:</span>
-          <span class="settings-desc-value">${position.name}</span>
-        </div>
-        <div class="settings-desc-row">
-          <span class="settings-desc-label">布局:</span>
-          <span class="settings-desc-value">${layout.name}</span>
-        </div>
-      `;
+    // 网格模板
+    const templatesGroup = document.createElement('div');
+    templatesGroup.className = 'grid grid-cols-1 gap-2 mb-3';
 
-      // 添加手动恢复按钮事件
-      // const manualRestoreBtn = this.currentSettingsDesc.querySelector('.manual-restore-btn');
-      // if (manualRestoreBtn) {
-      //   manualRestoreBtn.addEventListener('click', () => {
-      //     console.log(`[LayoutModeSection] Manual restore button clicked`);
-      //     this.manualRestoreSelection();
-      //   });
-      // }
-    }
+    const columnsInput = this.createTemplateInput('列模板', 'repeat(3, 1fr)', this.layoutParams.grid.templateColumns, (value) => this.updateGridParam('templateColumns', value));
+    const rowsInput = this.createTemplateInput('行模板', 'auto', this.layoutParams.grid.templateRows, (value) => this.updateGridParam('templateRows', value));
+
+    templatesGroup.appendChild(columnsInput);
+    templatesGroup.appendChild(rowsInput);
+
+    // 间距设置
+    const gapInput = this.createGapInput('gap', '网格间距', this.layoutParams.grid.gap, (value) => this.updateGridParam('gap', value));
+
+    container.appendChild(title);
+    container.appendChild(templatesGroup);
+    container.appendChild(gapInput);
+
+    return container;
   }
 
-  /**
-   * 手动恢复选择状态
-   */
-  manualRestoreSelection() {
-    console.log(`[LayoutModeSection] Manual restore triggered`);
+  createNoneParams() {
+    const container = document.createElement('div');
+    container.className = 'none-params-container';
 
-    const app = window.WVE?.app?.();
-    if (!app || !app.selectionManager) {
-      console.error(`[LayoutModeSection] Cannot manual restore - app or selectionManager not available`);
-      return;
-    }
+    const title = document.createElement('div');
+    title.className = 'section-title mb-2';
+    title.textContent = '文档流布局';
 
-    // 如果有保存的选择状态，尝试恢复
-    if (this.preservedSelection) {
-      console.log(`[LayoutModeSection] Using preserved selection for manual restore`);
-      this.restoreSelectionState(this.preservedSelection, app.selectionManager);
-    } else {
-      // 如果没有保存的状态，尝试重新选择当前元素
-      console.log(`[LayoutModeSection] No preserved selection, trying to restore current element`);
-      if (this.currentElement) {
-        console.log(`[LayoutModeSection] Manually restoring current element:`, this.currentElement);
-        app.selectionManager.select(this.currentElement, true);
-      } else {
-        console.warn(`[LayoutModeSection] No current element to restore`);
-      }
-    }
+    const description = document.createElement('div');
+    description.className = 'text-xs text-gray-400';
+    description.textContent = '元素按照标准文档流排列，无特殊布局参数。';
+
+    container.appendChild(title);
+    container.appendChild(description);
+
+    return container;
   }
 
-  /**
-   * 更新位置值显示/隐藏状态
-   */
-  updatePositionValuesVisibility() {
-    if (!this.positionValuesContainer) {
-      return;
-    }
+  createParamGroup(label, options, currentValue, onChange) {
+    const group = document.createElement('div');
+    group.className = 'param-group mb-3';
 
-    // static 定位时隐藏位置设置
-    if (this.currentPosition === 'static') {
-      this.positionValuesContainer.style.display = 'none';
-    } else {
-      this.positionValuesContainer.style.display = 'block';
-    }
-  }
+    const labelEl = document.createElement('div');
+    labelEl.className = 'text-xs text-gray-400 mb-1';
+    labelEl.textContent = label;
 
-  /**
-   * 更新位置值
-   */
-  updatePositionValue(direction, value, unit = null) {
-    if (!this.currentElement) {
-      return;
-    }
+    const buttonsContainer = document.createElement('div');
+    buttonsContainer.className = 'flex bg-[#2c2c2c] rounded gap-1 p-1 border border-[#3d3d3d]';
 
-    // 处理数值和单位
-    let finalValue = value;
-
-    // 如果值为空字符串，直接设为空（用于清除）
-    if (value === '') {
-      finalValue = '';
-    } else if (value && value !== 'auto') {
-      // 如果没有指定单位，使用选择的单位
-      if (unit) {
-        finalValue = value + unit;
-      } else if (!/^(auto|inherit|initial|unset)$/.test(value) && !/\d+(px|%|em|rem|vw|vh)$/.test(value)) {
-        // 如果值不包含单位且不是关键字，添加默认单位 px
-        const unitSelect = this.positionInputs[direction]?.unitSelect;
-        const defaultUnit = unitSelect?.value || 'px';
-        finalValue = value + defaultUnit;
-      }
-    }
-
-    // 更新状态
-    this.positionValues[direction] = finalValue;
-
-    // 应用到元素
-    console.log(`[LayoutModeSection] Applying ${direction}: ${finalValue} to element`);
-    this.applyPositionToElement();
-  }
-
-  /**
-   * 应用快捷值到所有方向
-   */
-  applyQuickValue(value) {
-    if (!this.positionInputs) {
-      return;
-    }
-
-    Object.keys(this.positionInputs).forEach(direction => {
-      const input = this.positionInputs[direction].input;
-      input.value = value;
-      this.updatePositionValue(direction, value);
+    options.forEach(option => {
+      const button = document.createElement('div');
+      button.className = `flex items-center justify-center px-2 py-1 rounded text-xs cursor-pointer transition-all duration-200 ${
+        currentValue === option.value
+          ? 'bg-white text-black'
+          : 'text-gray-400 hover:text-white hover:bg-[#3d3d3d]'
+      }`;
+      button.textContent = option.label;
+      button.onclick = () => onChange(option.value);
+      buttonsContainer.appendChild(button);
     });
+
+    group.appendChild(labelEl);
+    group.appendChild(buttonsContainer);
+
+    return group;
   }
 
-  /**
-   * 应用位置值到元素
-   */
-  applyPositionToElement() {
-    if (!this.currentElement) {
-      return;
+  createGapInput(type, label, currentValue, onChange) {
+    const group = document.createElement('div');
+    group.className = 'gap-input-group mb-2';
+
+    const labelEl = document.createElement('div');
+    labelEl.className = 'text-xs text-gray-400 mb-1';
+    labelEl.textContent = label;
+
+    const inputContainer = document.createElement('div');
+    inputContainer.className = 'flex items-center bg-[#1e1e1e] border border-[#404040] rounded';
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'flex-1 bg-transparent text-white text-xs px-2 py-1 outline-none';
+    input.placeholder = '0';
+    input.value = currentValue || '';
+    input.onchange = (e) => onChange(e.target.value);
+
+    const unitSelect = document.createElement('select');
+    unitSelect.className = 'bg-[#2c2c2c] text-white text-xs border-l border-[#404040] px-1 py-1 outline-none';
+
+    ['px', 'em', 'rem', '%'].forEach(unit => {
+      const option = document.createElement('option');
+      option.value = unit;
+      option.textContent = unit;
+      unitSelect.appendChild(option);
+    });
+
+    inputContainer.appendChild(input);
+    inputContainer.appendChild(unitSelect);
+
+    group.appendChild(labelEl);
+    group.appendChild(inputContainer);
+
+    return group;
+  }
+
+  createTemplateInput(label, placeholder, currentValue, onChange) {
+    const group = document.createElement('div');
+    group.className = 'template-input-group';
+
+    const labelEl = document.createElement('div');
+    labelEl.className = 'text-xs text-gray-400 mb-1';
+    labelEl.textContent = label;
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'w-full bg-[#1e1e1e] text-white text-xs px-2 py-1 border border-[#404040] rounded outline-none';
+    input.placeholder = placeholder;
+    input.value = currentValue || '';
+    input.onchange = (e) => onChange(e.target.value);
+
+    group.appendChild(labelEl);
+    group.appendChild(input);
+
+    return group;
+  }
+
+  // 状态更新方法
+  toggleDimensionsExpanded() {
+    this.uiState.dimensionsExpanded = !this.uiState.dimensionsExpanded;
+    this.dimensionsMoreBtn.textContent = this.uiState.dimensionsExpanded ? '收起' : '更多';
+    this.extendedDimensionsContainer.style.display = this.uiState.dimensionsExpanded ? 'block' : 'none';
+  }
+
+  toggleSpacingExpanded() {
+    this.uiState.spacingExpanded = !this.uiState.spacingExpanded;
+    this.spacingMoreBtn.textContent = this.uiState.spacingExpanded ? '收起' : '更多';
+    this.extendedSpacingContainer.style.display = this.uiState.spacingExpanded ? 'block' : 'none';
+  }
+
+  toggleClipContent(checked) {
+    this.uiState.clipContent = checked;
+    if (checked) {
+      // 启用裁剪时，默认设置为全裁剪
+      this.setClipMode('all', 'hidden');
+    } else {
+      // 禁用裁剪时，设置为不裁剪
+      this.setClipMode('none', 'visible');
     }
+  }
+
+  toggleClipExpanded() {
+    this.uiState.clipExpanded = !this.uiState.clipExpanded;
+    this.clipMoreBtn.textContent = this.uiState.clipExpanded ? '收起' : '更多';
+    this.extendedClipContainer.style.display = this.uiState.clipExpanded ? 'block' : 'none';
+  }
+
+  setClipMode(mode, overflowValue) {
+    this.clipOptions.mode = mode;
+
+    // 更新UI状态
+    this.uiState.clipContent = mode !== 'none';
+    if (this.clipCheckbox) {
+      this.clipCheckbox.checked = this.uiState.clipContent;
+    }
+
+    // 更新按钮状态
+    const clipModeButtons = this.extendedClipContainer.querySelectorAll('.clip-mode-btn');
+    clipModeButtons.forEach(btn => {
+      if (btn.getAttribute('data-clip-mode') === mode) {
+        btn.className = 'clip-mode-btn active text-xs px-2 py-1 bg-blue-600 text-white rounded';
+      } else {
+        btn.className = 'clip-mode-btn text-xs px-2 py-1 bg-gray-700 text-gray-300 hover:bg-gray-600 rounded transition-colors';
+      }
+    });
+
+    // 应用裁剪样式
+    this.applyClipMode(overflowValue);
+  }
+
+  applyClipMode(overflowValue) {
+    if (!this.currentElement) return;
 
     const element = this.currentElement;
 
-    // 清除前一个位置样式
-    this.clearPositionValueStyles(element);
+    // 应用 overflow 样式
+    element.style.overflow = overflowValue;
 
-    // 构建新的 Tailwind 位置类
-    const appliedClasses = this.buildPositionTailwindClasses();
-
-    console.log(`[LayoutModeSection] Applying position value classes:`, appliedClasses);
-
-    // 应用新的位置类
-    if (appliedClasses.length > 0) {
-      this.layoutAdapter.applyClasses(element, appliedClasses);
-    }
-
-    // 获取应用后的完整class属性值
-    const finalClasses = element.className;
-
-    // 使用防抖机制同步到 HTML 文件
-    this.debouncedSyncToHTMLFile(element, finalClasses, 'position-values');
-
-    console.log(`[LayoutModeSection] Position values applied with final classes:`, finalClasses);
+    // 同步到 HTML 文件
+    this.syncToHTMLFile(element, element.className, 'overflow');
   }
 
-  /**
-   * 构建位置值的 Tailwind 类
-   */
-  buildPositionTailwindClasses() {
-    const classes = [];
-
-    Object.entries(this.positionValues).forEach(([direction, value]) => {
-      if (value && value !== '') {
-        const tailwindClass = this.convertToTailwindPositionClass(direction, value);
-        if (tailwindClass) {
-          classes.push(tailwindClass);
-        }
-      }
-    });
-
-    return classes;
+  supportsAutoWidth(type) {
+    // 判断是否支持自适应功能
+    return ['width', 'height'].includes(type) && this.currentLayout === 'flex';
   }
 
-  /**
-   * 将位置值转换为 Tailwind 类
-   */
-  convertToTailwindPositionClass(direction, value) {
-    // 处理不同的值格式
-    if (value === 'auto') {
-      return `${direction}-auto`;
-    }
-
-    // 处理数值+单位的情况
-    const match = value.match(/^(.+?)(px|%|em|rem|vw|vh)$/);
-    if (match) {
-      const num = match[1];
-      const unit = match[2];
-
-      // 处理像素值
-      if (unit === 'px') {
-        const pixels = parseFloat(num);
-
-        // 常用的像素值映射到 Tailwind spacing scale
-        const pixelMap = {
-          '0': '0',
-          '1': '0.5',
-          '2': '0.5',
-          '4': '1',
-          '6': '1.5',
-          '8': '2',
-          '10': '2.5',
-          '12': '3',
-          '16': '4',
-          '20': '5',
-          '24': '6',
-          '28': '7',
-          '32': '8',
-          '36': '9',
-          '40': '10',
-          '44': '11',
-          '48': '12',
-          '56': '14',
-          '64': '16',
-          '80': '20',
-          '96': '24',
-          '112': '28',
-          '128': '32'
-        };
-
-        if (pixelMap[pixels]) {
-          return `${direction}-${pixelMap[pixels]}`;
-        } else {
-          // 对于不在标准 spacing scale 中的值，使用任意值语法
-          return `${direction}-[${value}]`;
-        }
-      }
-
-      // 处理百分比值
-      if (unit === '%') {
-        const percent = parseFloat(num);
-        const percentMap = {
-          '0': '0',
-          '25': '1/4',
-          '50': '1/2',
-          '75': '3/4',
-          '100': 'full'
-        };
-
-        if (percentMap[percent]) {
-          return `${direction}-${percentMap[percent]}`;
-        } else {
-          return `${direction}-[${value}]`;
-        }
-      }
-
-      // 其他单位使用任意值语法
-      return `${direction}-[${value}]`;
-    }
-
-    // 处理纯数字（添加px单位）
-    if (/^\d+$/.test(value)) {
-      return this.convertToTailwindPositionClass(direction, value + 'px');
-    }
-
-    // 处理其他关键字或无法识别的值
-    return `${direction}-[${value}]`;
+  setDimensionAuto(type) {
+    this.dimensions[type] = 'auto';
+    this.updateDimension(type, 'auto');
   }
 
-  /**
-   * 清除位置值相关的样式
-   */
-  clearPositionValueStyles(element) {
-    console.log(`[LayoutModeSection] Clearing position value styles from element:`, element);
-
-    // 获取所有位置相关的类名模式
-    const positionClassPatterns = [
-      /^(top|right|bottom|left)-.+$/,
-      /^-?(top|right|bottom|left)-.+$/
-    ];
-
-    const classesToRemove = [];
-    element.classList.forEach(className => {
-      if (positionClassPatterns.some(pattern => pattern.test(className))) {
-        classesToRemove.push(className);
-      }
-    });
-
-    classesToRemove.forEach(className => {
-      element.classList.remove(className);
-    });
-
-    console.log(`[LayoutModeSection] Removed position classes:`, classesToRemove);
+  updateDimension(type, value) {
+    this.dimensions[type] = value;
+    this.applyDimensions();
   }
 
-  /**
-   * 防抖同步到 HTML 文件
-   */
-  debouncedSyncToHTMLFile(element, finalClasses, changeType) {
-    // 清除之前的定时器
-    if (this.syncDebounceTimer) {
-      clearTimeout(this.syncDebounceTimer);
+  updateDimensionUnit(type, value, unit) {
+    if (value && value !== 'auto') {
+      // 移除现有单位，然后添加新单位
+      const numericValue = value.replace(/[a-zA-Z%]+$/, '');
+      this.dimensions[type] = numericValue + unit;
+    } else {
+      this.dimensions[type] = value;
     }
-
-    // 设置新的防抖定时器
-    this.syncDebounceTimer = setTimeout(() => {
-      this.syncToHTMLFile(element, finalClasses, changeType);
-      this.syncDebounceTimer = null;
-    }, this.syncDebounceDelay);
-
-    console.log(`[LayoutModeSection] Debounced sync scheduled for ${this.syncDebounceDelay}ms`);
+    this.applyDimensions();
   }
 
-  /**
-   * 获取元素的内联样式
-   */
-  getElementInlineStyles(element) {
-    const styles = {};
-    if (element.style && element.style.length > 0) {
-      for (let i = 0; i < element.style.length; i++) {
-        const property = element.style[i];
-        styles[property] = element.style.getPropertyValue(property);
-      }
+  updateSpacing(type, value, unified = false) {
+    if (unified) {
+      // 统一设置所有方向
+      ['top', 'right', 'bottom', 'left'].forEach(direction => {
+        this.spacing[type][direction] = value;
+      });
     }
-    return styles;
+    this.applySpacing();
   }
 
-
-  /**
-   * 从元素检测位置值
-   */
-  detectPositionValuesFromElement(element) {
-    if (!element) {
-      return { top: '', right: '', bottom: '', left: '' };
+  updateSpacingUnit(type, value, unit) {
+    if (value && value !== 'auto') {
+      // 移除现有单位，然后添加新单位
+      const numericValue = value.replace(/[a-zA-Z%]+$/, '');
+      const finalValue = numericValue + unit;
+      // 统一设置所有方向
+      ['top', 'right', 'bottom', 'left'].forEach(direction => {
+        this.spacing[type][direction] = finalValue;
+      });
+    } else {
+      // 统一设置所有方向
+      ['top', 'right', 'bottom', 'left'].forEach(direction => {
+        this.spacing[type][direction] = value;
+      });
     }
-
-    const values = { top: '', right: '', bottom: '', left: '' };
-    const directions = ['top', 'right', 'bottom', 'left'];
-
-    // 首先从 Tailwind 类名中检测
-    directions.forEach(direction => {
-      const detectedValue = this.detectPositionValueFromClasses(element, direction);
-      if (detectedValue) {
-        values[direction] = detectedValue;
-      }
-    });
-
-    // 如果没有找到 Tailwind 类，回退到计算样式检测
-    directions.forEach(direction => {
-      if (!values[direction]) {
-        const style = window.getComputedStyle(element);
-        const value = style[direction];
-        if (value && value !== 'auto' && value !== '0px') {
-          values[direction] = value;
-        }
-      }
-    });
-
-    return values;
+    this.applySpacing();
   }
 
-  /**
-   * 从元素的类名中检测位置值
-   */
-  detectPositionValueFromClasses(element, direction) {
-    const classList = Array.from(element.classList);
-
-    // 查找位置相关的类名
-    for (const className of classList) {
-      const positionValue = this.parsePositionClassToValue(className, direction);
-      if (positionValue) {
-        return positionValue;
-      }
-    }
-
-    return null;
+  updateDirectionalSpacing(type, direction, value) {
+    this.spacing[type][direction] = value;
+    this.spacing[type].unified = false;
+    this.applySpacing();
   }
 
-  /**
-   * 解析位置类名为具体值
-   */
-  parsePositionClassToValue(className, direction) {
-    // 匹配标准格式：top-4, right-1/2, left-auto 等
-    const standardPattern = new RegExp(`^${direction}-(.+)$`);
-    const match = className.match(standardPattern);
-
-    if (!match) {
-      return null;
+  updateDirectionalSpacingUnit(type, direction, value, unit) {
+    if (value && value !== 'auto') {
+      // 移除现有单位，然后添加新单位
+      const numericValue = value.replace(/[a-zA-Z%]+$/, '');
+      this.spacing[type][direction] = numericValue + unit;
+    } else {
+      this.spacing[type][direction] = value;
     }
-
-    const suffix = match[1];
-
-    // 处理 auto
-    if (suffix === 'auto') {
-      return 'auto';
-    }
-
-    // 处理任意值：top-[20px], right-[10%] 等
-    const arbitraryMatch = suffix.match(/^\[(.+)\]$/);
-    if (arbitraryMatch) {
-      return arbitraryMatch[1];
-    }
-
-    // 处理分数值
-    const fractionMap = {
-      '0': '0px',
-      '1/4': '25%',
-      '1/2': '50%',
-      '3/4': '75%',
-      'full': '100%'
-    };
-
-    if (fractionMap[suffix]) {
-      return fractionMap[suffix];
-    }
-
-    // 处理 spacing scale（转换为像素值）
-    const spacingMap = {
-      '0': '0px',
-      '0.5': '2px',
-      '1': '4px',
-      '1.5': '6px',
-      '2': '8px',
-      '2.5': '10px',
-      '3': '12px',
-      '4': '16px',
-      '5': '20px',
-      '6': '24px',
-      '7': '28px',
-      '8': '32px',
-      '9': '36px',
-      '10': '40px',
-      '11': '44px',
-      '12': '48px',
-      '14': '56px',
-      '16': '64px',
-      '20': '80px',
-      '24': '96px',
-      '28': '112px',
-      '32': '128px'
-    };
-
-    if (spacingMap[suffix]) {
-      return spacingMap[suffix];
-    }
-
-    // 其他无法识别的后缀，返回null
-    return null;
+    this.spacing[type].unified = false;
+    this.applySpacing();
   }
 
-  /**
-   * 更新位置输入控件的值
-   */
-  updatePositionInputs() {
-    if (!this.positionInputs) {
-      return;
-    }
-
-    Object.entries(this.positionValues).forEach(([direction, value]) => {
-      const controls = this.positionInputs[direction];
-      if (!controls) {
-        return;
-      }
-
-      const { input, unitSelect } = controls;
-
-      if (value && value !== '') {
-        // 解析值和单位
-        const match = value.match(/^(.+?)(px|%|em|rem|vw|vh)$/);
-        if (match) {
-          input.value = match[1];
-          unitSelect.value = match[2];
-        } else {
-          input.value = value;
-        }
-      } else {
-        input.value = '';
-      }
-    });
+  updateFlexParam(param, value) {
+    this.layoutParams.flex[param] = value;
+    this.applyLayoutParams();
   }
 
-  /**
-   * 选择定位类型
-   */
-  selectPosition(positionKey) {
-    if (this.currentPosition === positionKey) {
-      return;
-    }
-
-    const prevPosition = this.currentPosition;
-    this.currentPosition = positionKey;
-
-    console.log(`[LayoutModeSection] Switching position from ${prevPosition} to ${positionKey}`);
-
-    // 更新UI状态
-    this.updatePositionButtons();
-    this.updatePositionValuesVisibility();
-    this.updateSettingsDescription();
-
-    // 应用定位类型到当前元素
-    if (this.currentElement) {
-      console.log(`[LayoutModeSection] Applying ${positionKey} position to element`);
-      this.applyPositionTypeToElement(positionKey, prevPosition);
-    }
-
-    // 触发定位变更事件
-    if (this.onPositionChange) {
-      this.onPositionChange(positionKey, prevPosition, this.currentElement);
-    }
-
-    // 通知外部系统
-    this.dispatchPositionChangeEvent(positionKey, prevPosition);
+  updateGridParam(param, value) {
+    this.layoutParams.grid[param] = value;
+    this.applyLayoutParams();
   }
 
   /**
@@ -863,7 +1021,7 @@ window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.Proper
 
     // 更新UI状态
     this.updateLayoutButtons();
-    this.updateSettingsDescription();
+    this.updateLayoutParams();
 
     // 应用布局方式到当前元素
     if (this.currentElement) {
@@ -880,19 +1038,6 @@ window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.Proper
     this.dispatchLayoutChangeEvent(layoutKey, prevLayout);
   }
 
-  updatePositionButtons() {
-    const buttons = this.element.querySelectorAll('[data-position]');
-    buttons.forEach(button => {
-      if (button.dataset.position === this.currentPosition) {
-        // 激活状态 - 使用白色背景，黑色图标
-        button.className = 'flex items-center justify-center w-8 h-8 rounded bg-white text-black cursor-pointer';
-      } else {
-        // 非激活状态
-        button.className = 'flex items-center justify-center w-8 h-8 rounded text-gray-400 hover:text-white hover:bg-[#3d3d3d] transition-all duration-200 cursor-pointer';
-      }
-    });
-  }
-
   updateLayoutButtons() {
     const buttons = this.element.querySelectorAll('[data-layout]');
     buttons.forEach(button => {
@@ -906,38 +1051,40 @@ window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.Proper
     });
   }
 
-  /**
-   * 将定位类型应用到元素
-   */
-  applyPositionTypeToElement(newPosition, prevPosition) {
-    if (!this.currentElement) {
+  updateLayoutParams() {
+    if (!this.layoutParamsContainer) return;
+
+    // 清空容器
+    this.layoutParamsContainer.innerHTML = '';
+
+    // 根据当前布局模式显示对应参数
+    // 文档流布局（none）时隐藏整个参数区域以节省空间
+    if (this.currentLayout === 'none') {
+      this.layoutParamsContainer.style.display = 'none';
       return;
     }
 
-    const element = this.currentElement;
+    // 显示参数区域并创建对应的参数控件
+    this.layoutParamsContainer.style.display = 'block';
 
-    // 清除前一个定位类型的样式
-    this.clearPositionStyles(element, prevPosition);
-
-    // 应用新定位类型的样式
-    let appliedClasses = [];
-    if (newPosition !== 'static') {
-      appliedClasses = [newPosition];
-      this.layoutAdapter.applyClasses(element, appliedClasses);
+    let paramsElement;
+    switch (this.currentLayout) {
+      case 'flex':
+        paramsElement = this.createFlexParams();
+        break;
+      case 'grid':
+        paramsElement = this.createGridParams();
+        break;
     }
 
-    // 获取应用后的完整class属性值
-    const finalClasses = element.className;
-
-    // 同步到 HTML 文件
-    this.syncToHTMLFile(element, finalClasses, 'position');
-
-    console.log(`[LayoutModeSection] Position ${newPosition} applied`);
+    if (paramsElement) {
+      this.layoutParamsContainer.appendChild(paramsElement);
+      // 重新初始化图标
+      setTimeout(() => this.initializeLucideIcons(paramsElement), 0);
+    }
   }
 
-  /**
-   * 将布局方式应用到元素
-   */
+  // 应用样式到元素的方法
   applyLayoutToElement(newLayout, prevLayout) {
     if (!this.currentElement) {
       return;
@@ -975,18 +1122,147 @@ window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.Proper
     console.log(`[LayoutModeSection] Layout ${newLayout} applied`);
   }
 
-  clearPositionStyles(element, position) {
-    console.log(`[LayoutModeSection] Clearing ${position} position styles from element:`, element);
+  applyDimensions() {
+    if (!this.currentElement) return;
 
-    // 移除所有定位相关的类名
-    const positionClasses = ['static', 'relative', 'absolute', 'fixed', 'sticky'];
-    positionClasses.forEach(className => {
-      if (element.classList.contains(className)) {
-        element.classList.remove(className);
+    const element = this.currentElement;
+    const classes = [];
+
+    // 构建尺寸相关的 Tailwind 类
+    Object.entries(this.dimensions).forEach(([prop, value]) => {
+      if (value) {
+        const tailwindClass = this.convertToTailwindDimensionClass(prop, value);
+        if (tailwindClass) {
+          classes.push(tailwindClass);
+        }
       }
     });
 
-    console.log(`[LayoutModeSection] Cleared ${position} position styles`);
+    // 应用类名
+    if (classes.length > 0) {
+      this.layoutAdapter.applyClasses(element, classes);
+    }
+
+    this.syncToHTMLFile(element, element.className, 'dimensions');
+  }
+
+  applySpacing() {
+    if (!this.currentElement) return;
+
+    const element = this.currentElement;
+    const classes = [];
+
+    // 构建内外边距相关的 Tailwind 类
+    ['margin', 'padding'].forEach(type => {
+      const prefix = type === 'margin' ? 'm' : 'p';
+      const spacing = this.spacing[type];
+
+      if (spacing.unified && spacing.top) {
+        // 统一设置
+        classes.push(`${prefix}-[${spacing.top}]`);
+      } else {
+        // 分方向设置
+        ['top', 'right', 'bottom', 'left'].forEach(direction => {
+          const directionPrefix = {
+            top: 't',
+            right: 'r',
+            bottom: 'b',
+            left: 'l'
+          }[direction];
+
+          if (spacing[direction]) {
+            classes.push(`${prefix}${directionPrefix}-[${spacing[direction]}]`);
+          }
+        });
+      }
+    });
+
+    if (classes.length > 0) {
+      this.layoutAdapter.applyClasses(element, classes);
+    }
+
+    this.syncToHTMLFile(element, element.className, 'spacing');
+  }
+
+  applyLayoutParams() {
+    if (!this.currentElement) return;
+
+    const element = this.currentElement;
+    const classes = [];
+
+    // 根据布局类型应用参数
+    switch (this.currentLayout) {
+      case 'flex':
+        const flexParams = this.layoutParams.flex;
+        if (flexParams.direction !== 'row') classes.push(`flex-${flexParams.direction}`);
+        if (flexParams.justifyContent !== 'flex-start') classes.push(`justify-${flexParams.justifyContent}`);
+        if (flexParams.alignItems !== 'stretch') classes.push(`items-${flexParams.alignItems}`);
+        if (flexParams.gap) classes.push(`gap-[${flexParams.gap}]`);
+        break;
+      case 'grid':
+        const gridParams = this.layoutParams.grid;
+        if (gridParams.templateColumns) classes.push(`grid-cols-[${gridParams.templateColumns}]`);
+        if (gridParams.templateRows) classes.push(`grid-rows-[${gridParams.templateRows}]`);
+        if (gridParams.gap) classes.push(`gap-[${gridParams.gap}]`);
+        break;
+    }
+
+    if (classes.length > 0) {
+      this.layoutAdapter.applyClasses(element, classes);
+    }
+
+    this.syncToHTMLFile(element, element.className, 'layout-params');
+  }
+
+  applyClipContent() {
+    if (!this.currentElement) return;
+
+    const element = this.currentElement;
+    const classes = this.uiState.clipContent ? ['overflow-hidden'] : [];
+
+    if (classes.length > 0) {
+      this.layoutAdapter.applyClasses(element, classes);
+    } else {
+      // 移除overflow相关类名
+      element.classList.remove('overflow-hidden', 'overflow-visible', 'overflow-auto', 'overflow-scroll');
+    }
+
+    this.syncToHTMLFile(element, element.className, 'overflow');
+  }
+
+  convertToTailwindDimensionClass(prop, value) {
+    const prefixMap = {
+      width: 'w',
+      height: 'h',
+      minWidth: 'min-w',
+      minHeight: 'min-h',
+      maxWidth: 'max-w',
+      maxHeight: 'max-h'
+    };
+
+    const prefix = prefixMap[prop];
+    if (!prefix) return null;
+
+    if (value === 'auto') {
+      return `${prefix}-auto`;
+    }
+
+    // 检查是否为标准 Tailwind 数值（如 20, 64 等）
+    if (/^\d+$/.test(value)) {
+      return `${prefix}-${value}`;
+    }
+
+    // 对于带单位的值或其他值，使用任意值语法
+    // 确保值包含单位，如果没有单位则添加 px
+    let finalValue = value;
+    if (/^\d+$/.test(value)) {
+      finalValue = value + 'px';
+    } else if (!/^(auto|inherit|initial|unset)$/.test(value) && !/\d+(px|%|em|rem|vw|vh|fr)$/.test(value)) {
+      // 如果值不包含单位且不是关键字，添加默认单位 px
+      finalValue = value + 'px';
+    }
+
+    return `${prefix}-[${finalValue}]`;
   }
 
   clearLayoutStyles(element, layout) {
@@ -1001,29 +1277,6 @@ window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.Proper
     });
 
     console.log(`[LayoutModeSection] Cleared ${layout} layout styles`);
-  }
-
-  /**
-   * 从元素检测当前定位类型
-   */
-  detectPositionFromElement(element) {
-    if (!element) {
-      return 'static';
-    }
-
-    // 首先检查 Tailwind 类名
-    const classList = Array.from(element.classList);
-
-    // 检测定位类名
-    for (const cls of classList) {
-      if (['static', 'relative', 'absolute', 'fixed', 'sticky'].includes(cls)) {
-        return cls;
-      }
-    }
-
-    // 回退到计算样式检测
-    const style = window.getComputedStyle(element);
-    return style.position || 'static';
   }
 
   /**
@@ -1071,56 +1324,166 @@ window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.Proper
     console.log(`[LayoutModeSection] Update called with element:`, element);
 
     if (element) {
-      // 检测元素的当前定位类型和布局方式
-      const detectedPosition = this.detectPositionFromElement(element);
+      // 检测元素的当前布局方式
       const detectedLayout = this.detectLayoutFromElement(element);
 
-      console.log(`[LayoutModeSection] Detected position: ${detectedPosition}, layout: ${detectedLayout}`);
-
-      let updated = false;
-
-      // 更新定位类型
-      if (detectedPosition !== this.currentPosition) {
-        this.currentPosition = detectedPosition;
-        this.updatePositionButtons();
-        this.updatePositionValuesVisibility();
-        updated = true;
-      }
+      console.log(`[LayoutModeSection] Detected layout: ${detectedLayout}`);
 
       // 更新布局方式
       if (detectedLayout !== this.currentLayout) {
         this.currentLayout = detectedLayout;
         this.updateLayoutButtons();
-        updated = true;
+        this.updateLayoutParams();
       }
 
-      // 更新位置值
-      const detectedPositionValues = this.detectPositionValuesFromElement(element);
-      this.positionValues = detectedPositionValues;
-      this.updatePositionInputs();
+      // 检测和更新尺寸信息
+      this.detectDimensionsFromElement(element);
 
-      if (updated) {
-        this.updateSettingsDescription();
-      }
+      // 检测和更新间距信息
+      this.detectSpacingFromElement(element);
+
+      // 检测溢出设置
+      this.detectOverflowFromElement(element);
     } else {
       console.log(`[LayoutModeSection] No element provided to update`);
+    }
+  }
+
+  detectDimensionsFromElement(element) {
+    // 从元素检测尺寸信息并更新UI
+    const classList = Array.from(element.classList);
+
+    // 重置 dimensions 对象
+    this.dimensions = {
+      width: '',
+      height: '',
+      minWidth: '',
+      minHeight: '',
+      maxWidth: '',
+      maxHeight: ''
+    };
+
+    // 解析 Tailwind 尺寸类
+    const dimensionPatterns = {
+      width: /^w-(.+)$/,
+      height: /^h-(.+)$/,
+      minWidth: /^min-w-(.+)$/,
+      minHeight: /^min-h-(.+)$/,
+      maxWidth: /^max-w-(.+)$/,
+      maxHeight: /^max-h-(.+)$/
+    };
+
+    classList.forEach(className => {
+      Object.entries(dimensionPatterns).forEach(([prop, pattern]) => {
+        const match = className.match(pattern);
+        if (match) {
+          const value = match[1];
+
+          // 处理不同类型的值
+          if (value === 'auto') {
+            this.dimensions[prop] = 'auto';
+          } else if (value.startsWith('[') && value.endsWith(']')) {
+            // 任意值语法 w-[30px]
+            this.dimensions[prop] = value.slice(1, -1);
+          } else if (/^\d+$/.test(value)) {
+            // 标准 Tailwind 数值 w-20
+            this.dimensions[prop] = value;
+          } else {
+            // 其他预设值
+            this.dimensions[prop] = value;
+          }
+        }
+      });
+    });
+
+    // 更新 UI 输入框
+    this.updateDimensionInputs();
+  }
+
+  updateDimensionInputs() {
+    // 更新所有尺寸输入框的值
+    Object.entries(this.dimensions).forEach(([type, value]) => {
+      const input = this.element.querySelector(`input[data-dimension="${type}"]`);
+      if (input) {
+        input.value = value || '';
+      }
+
+      // 更新单位选择器
+      const unitSelect = this.element.querySelector(`select[data-dimension-unit="${type}"]`);
+      if (unitSelect && value && value !== 'auto') {
+        // 提取单位
+        const unitMatch = value.match(/[a-zA-Z%]+$/);
+        if (unitMatch) {
+          unitSelect.value = unitMatch[0];
+        } else if (/^\d+$/.test(value)) {
+          // 标准 Tailwind 数值，单位设为 'px'（作为默认显示）
+          unitSelect.value = 'px';
+        }
+      }
+    });
+  }
+
+  detectSpacingFromElement(element) {
+    // 从元素检测间距信息并更新UI
+    const style = window.getComputedStyle(element);
+
+    // 检测是否有overflow hidden
+    this.uiState.clipContent = style.overflow === 'hidden';
+    if (this.clipCheckbox) {
+      this.clipCheckbox.checked = this.uiState.clipContent;
+    }
+  }
+
+  detectOverflowFromElement(element) {
+    const style = window.getComputedStyle(element);
+    const overflow = style.overflow;
+    const overflowX = style.overflowX;
+    const overflowY = style.overflowY;
+
+    // 检测裁剪模式
+    if (overflow === 'hidden' || (overflowX === 'hidden' && overflowY === 'hidden')) {
+      this.clipOptions.mode = 'all';
+      this.uiState.clipContent = true;
+    } else if (overflow === 'hidden auto' || (overflowX === 'hidden' && overflowY === 'auto')) {
+      this.clipOptions.mode = 'horizontal';
+      this.uiState.clipContent = true;
+    } else if (overflow === 'auto hidden' || (overflowX === 'auto' && overflowY === 'hidden')) {
+      this.clipOptions.mode = 'vertical';
+      this.uiState.clipContent = true;
+    } else {
+      this.clipOptions.mode = 'none';
+      this.uiState.clipContent = false;
+    }
+
+    // 更新复选框状态
+    if (this.clipCheckbox) {
+      this.clipCheckbox.checked = this.uiState.clipContent;
+    }
+
+    // 更新按钮状态（如果扩展面板存在）
+    if (this.extendedClipContainer) {
+      const clipModeButtons = this.extendedClipContainer.querySelectorAll('.clip-mode-btn');
+      clipModeButtons.forEach(btn => {
+        if (btn.getAttribute('data-clip-mode') === this.clipOptions.mode) {
+          btn.className = 'clip-mode-btn active text-xs px-2 py-1 bg-blue-600 text-white rounded';
+        } else {
+          btn.className = 'clip-mode-btn text-xs px-2 py-1 bg-gray-700 text-gray-300 hover:bg-gray-600 rounded transition-colors';
+        }
+      });
     }
   }
 
   /**
    * 同步变更到 HTML 文件
    */
-  syncToHTMLFile(element, finalClasses, changeType, customChangeData = null) {
+  syncToHTMLFile(element, finalClasses, changeType) {
     console.log(`[LayoutModeSection] Syncing ${changeType} change to HTML file`);
     console.log(`[LayoutModeSection] Element:`, element);
     console.log(`[LayoutModeSection] Final classes:`, finalClasses);
 
     try {
-      // 保存当前选中状态，避免同步后丢失选择
-      this.preserveSelectionState();
-
-      // 使用自定义变更数据或构造默认的 Tailwind 样式变更数据
-      const changeData = customChangeData || {
+      // 使用 Tailwind 样式变更数据
+      const changeData = {
         changes: [{
           element: {
             tagName: element.tagName.toLowerCase(),
@@ -1167,569 +1530,6 @@ window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.Proper
   }
 
   /**
-   * 保存当前选中状态，以便在同步后恢复
-   */
-  preserveSelectionState() {
-    console.log(`[LayoutModeSection] ===== PRESERVE SELECTION STATE START =====`);
-
-    // 清除之前的恢复定时器，避免多次并发恢复
-    if (this.restoreSelectionTimer) {
-      clearTimeout(this.restoreSelectionTimer);
-      this.restoreSelectionTimer = null;
-    }
-
-    const selectedElements = document.querySelectorAll('[wve-selected]');
-    console.log(`[LayoutModeSection] Found ${selectedElements.length} selected elements:`, Array.from(selectedElements));
-
-    if (selectedElements.length > 0) {
-      // 获取 WebVisualEditor 实例
-      const app = window.WVE?.app?.();
-      console.log(`[LayoutModeSection] WebVisualEditor app available:`, !!app);
-      console.log(`[LayoutModeSection] SelectionManager available:`, !!(app && app.selectionManager));
-
-      if (app && app.selectionManager) {
-        // 保存选中的元素信息，添加更多调试信息
-        this.preservedSelection = Array.from(selectedElements).map((el, index) => {
-          const elementInfo = {
-            wveId: el.dataset.wveId,
-            wveCodeStart: el.dataset.wveCodeStart,
-            wveCodeEnd: el.dataset.wveCodeEnd,
-            selector: this.generateElementSelector(el),
-            element: el,
-            tagName: el.tagName,
-            className: el.className,
-            id: el.id,
-            innerHTML: el.innerHTML.substring(0, 100) + '...'
-          };
-
-          console.log(`[LayoutModeSection] Preserving element ${index + 1}:`, {
-            wveId: elementInfo.wveId,
-            wveCodeStart: elementInfo.wveCodeStart,
-            wveCodeEnd: elementInfo.wveCodeEnd,
-            selector: elementInfo.selector,
-            tagName: elementInfo.tagName,
-            className: elementInfo.className,
-            id: elementInfo.id
-          });
-
-          return elementInfo;
-        });
-
-        console.log(`[LayoutModeSection] Successfully preserved ${this.preservedSelection.length} elements`);
-
-        // 【关键】：将选择状态保存到 sessionStorage，确保 WebView 重新加载后能恢复
-        this.saveSelectionToStorage(this.preservedSelection);
-
-        // 【测试】：立即测试 sessionStorage 是否可用
-        this.testSessionStorage();
-
-        // 设置多重恢复机制，确保选择状态能够被恢复
-        this.setupMultipleRestoreAttempts(app.selectionManager);
-      } else {
-        console.error(`[LayoutModeSection] Cannot preserve selection - app or selectionManager not available`);
-      }
-    } else {
-      console.warn(`[LayoutModeSection] No selected elements found to preserve`);
-    }
-
-    console.log(`[LayoutModeSection] ===== PRESERVE SELECTION STATE END =====`);
-  }
-
-  /**
-   * 将选择状态保存到 sessionStorage
-   */
-  saveSelectionToStorage(preservedSelection) {
-    console.log(`[LayoutModeSection] ===== SAVING SELECTION TO STORAGE =====`);
-
-    try {
-      const storageKey = 'wve-preserved-selection';
-      const dataToSave = {
-        timestamp: Date.now(),
-        selections: preservedSelection.map(sel => ({
-          wveId: sel.wveId,
-          wveCodeStart: sel.wveCodeStart,
-          wveCodeEnd: sel.wveCodeEnd,
-          selector: sel.selector,
-          tagName: sel.tagName,
-          className: sel.className,
-          id: sel.id
-        }))
-      };
-
-      console.log(`[LayoutModeSection] Data to save:`, dataToSave);
-      console.log(`[LayoutModeSection] SessionStorage available:`, typeof sessionStorage !== 'undefined');
-      console.log(`[LayoutModeSection] SessionStorage before save - length:`, sessionStorage.length);
-
-      sessionStorage.setItem(storageKey, JSON.stringify(dataToSave));
-
-      // 验证保存是否成功
-      const verifyData = sessionStorage.getItem(storageKey);
-      console.log(`[LayoutModeSection] Verification - data saved successfully:`, verifyData !== null);
-      console.log(`[LayoutModeSection] SessionStorage after save - length:`, sessionStorage.length);
-
-      if (verifyData) {
-        console.log(`[LayoutModeSection] ✅ Selection state saved successfully to sessionStorage`);
-      } else {
-        console.error(`[LayoutModeSection] ❌ Failed to save selection state - verification failed`);
-      }
-    } catch (error) {
-      console.error(`[LayoutModeSection] ❌ Failed to save selection to storage:`, error);
-    }
-
-    console.log(`[LayoutModeSection] ===== SAVING SELECTION TO STORAGE END =====`);
-  }
-
-  /**
-   * 从 sessionStorage 恢复选择状态
-   */
-  loadSelectionFromStorage() {
-    try {
-      const storageKey = 'wve-preserved-selection';
-      const savedData = sessionStorage.getItem(storageKey);
-
-      if (!savedData) {
-        console.log(`[LayoutModeSection] No saved selection found in storage`);
-        return null;
-      }
-
-      const parsedData = JSON.parse(savedData);
-      const ageMs = Date.now() - parsedData.timestamp;
-
-      // 如果保存的数据超过10秒，认为过期
-      if (ageMs > 10000) {
-        console.log(`[LayoutModeSection] Saved selection is too old (${ageMs}ms), ignoring`);
-        sessionStorage.removeItem(storageKey);
-        return null;
-      }
-
-      console.log(`[LayoutModeSection] Loaded selection from storage:`, parsedData);
-      return parsedData.selections;
-    } catch (error) {
-      console.error(`[LayoutModeSection] Failed to load selection from storage:`, error);
-      return null;
-    }
-  }
-
-  /**
-   * 清除存储的选择状态
-   */
-  clearStoredSelection() {
-    try {
-      const storageKey = 'wve-preserved-selection';
-      sessionStorage.removeItem(storageKey);
-      console.log(`[LayoutModeSection] Cleared stored selection`);
-    } catch (error) {
-      console.error(`[LayoutModeSection] Failed to clear stored selection:`, error);
-    }
-  }
-
-  /**
-   * 测试 sessionStorage 是否在WebView中正常工作
-   */
-  testSessionStorage() {
-    console.log(`[LayoutModeSection] ===== TESTING SESSION STORAGE =====`);
-
-    try {
-      const testKey = 'wve-test-storage';
-      const testData = { timestamp: Date.now(), test: 'sessionStorage功能测试' };
-
-      // 测试写入
-      sessionStorage.setItem(testKey, JSON.stringify(testData));
-      console.log(`[LayoutModeSection] ✅ SessionStorage write test passed`);
-
-      // 测试读取
-      const retrievedData = sessionStorage.getItem(testKey);
-      if (retrievedData) {
-        const parsedData = JSON.parse(retrievedData);
-        console.log(`[LayoutModeSection] ✅ SessionStorage read test passed:`, parsedData);
-      } else {
-        console.error(`[LayoutModeSection] ❌ SessionStorage read test failed`);
-      }
-
-      // 清理测试数据
-      sessionStorage.removeItem(testKey);
-      console.log(`[LayoutModeSection] ✅ SessionStorage cleanup completed`);
-
-      // 报告 sessionStorage 状态
-      console.log(`[LayoutModeSection] SessionStorage status:`, {
-        available: typeof sessionStorage !== 'undefined',
-        length: sessionStorage.length,
-        keys: Object.keys(sessionStorage)
-      });
-
-    } catch (error) {
-      console.error(`[LayoutModeSection] ❌ SessionStorage test failed:`, error);
-    }
-
-    console.log(`[LayoutModeSection] ===== SESSION STORAGE TEST END =====`);
-  }
-
-  /**
-   * 设置多重恢复尝试机制，确保选择状态能够被恢复
-   */
-  setupMultipleRestoreAttempts(selectionManager) {
-    console.log(`[LayoutModeSection] Setting up multiple restore attempts`);
-
-    // 清理之前的恢复尝试
-    this.clearRestoreAttempts();
-
-    // 方案1: 短期多次尝试 - 在同步后立即开始尝试恢复
-    const shortTermAttempts = [200, 500, 800, 1200, 1800]; // 5次尝试，递增延迟
-    shortTermAttempts.forEach((delay, index) => {
-      const timer = setTimeout(() => {
-        if (this.preservedSelection && this.attemptRestore(selectionManager, `short-term-${index + 1}`)) {
-          this.clearRestoreAttempts(); // 恢复成功后清理所有其他尝试
-        }
-      }, delay);
-      this.restoreAttemptTimers.push(timer);
-    });
-
-    // 方案2: 监听DOM变化，当检测到元素重新出现时立即恢复
-    this.setupDOMChangeListener(selectionManager);
-
-    // 方案3: 监听WebView消息，当接收到特定消息时恢复
-    this.setupMessageListener(selectionManager);
-
-    // 方案4: 长期保护 - 如果前面的方案都失败，继续尝试
-    const longTermTimer = setTimeout(() => {
-      if (this.preservedSelection) {
-        console.log(`[LayoutModeSection] Long-term restore attempt`);
-        this.attemptRestore(selectionManager, 'long-term');
-        this.clearRestoreAttempts();
-      }
-    }, 3000);
-    this.restoreAttemptTimers.push(longTermTimer);
-
-    // 方案5: 持续监控 - 定期检查选择状态，如果丢失则恢复
-    this.setupContinuousMonitoring(selectionManager);
-  }
-
-  /**
-   * 尝试恢复选择状态
-   */
-  attemptRestore(selectionManager, attemptName) {
-    if (!this.preservedSelection || !selectionManager) {
-      return false;
-    }
-
-    console.log(`[LayoutModeSection] Attempting restore: ${attemptName}`);
-
-    // 检查目标元素是否已经存在
-    let foundElements = 0;
-    for (const preserved of this.preservedSelection) {
-      let targetElement = null;
-
-      if (preserved.wveId) {
-        targetElement = document.querySelector(`[data-wve-id="${preserved.wveId}"]`);
-      }
-
-      if (!targetElement && preserved.selector) {
-        try {
-          targetElement = document.querySelector(preserved.selector);
-        } catch (e) {
-          // 忽略选择器错误
-        }
-      }
-
-      if (targetElement) {
-        foundElements++;
-      }
-    }
-
-    console.log(`[LayoutModeSection] ${attemptName}: Found ${foundElements}/${this.preservedSelection.length} elements`);
-
-    // 如果找到所有元素，执行恢复
-    if (foundElements === this.preservedSelection.length) {
-      this.restoreSelectionState(this.preservedSelection, selectionManager);
-      return true;
-    }
-
-    return false;
-  }
-
-  /**
-   * 设置DOM变化监听器
-   */
-  setupDOMChangeListener(selectionManager) {
-    if (this.domObserver) {
-      this.domObserver.disconnect();
-    }
-
-    this.domObserver = new MutationObserver((mutations) => {
-      if (!this.preservedSelection) {
-        return;
-      }
-
-      // 检查是否有新元素添加
-      let hasNewElements = false;
-      mutations.forEach(mutation => {
-        if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
-          hasNewElements = true;
-        }
-      });
-
-      if (hasNewElements) {
-        console.log(`[LayoutModeSection] DOM changed, attempting restore`);
-        setTimeout(() => {
-          if (this.attemptRestore(selectionManager, 'dom-change')) {
-            this.clearRestoreAttempts();
-          }
-        }, 100);
-      }
-    });
-
-    this.domObserver.observe(document.body, {
-      childList: true,
-      subtree: true
-    });
-  }
-
-  /**
-   * 设置消息监听器
-   */
-  setupMessageListener(selectionManager) {
-    if (this.selectionRestoreListener) {
-      window.removeEventListener('message', this.selectionRestoreListener);
-    }
-
-    this.selectionRestoreListener = (event) => {
-      if (!this.preservedSelection) {
-        return;
-      }
-
-      // 监听各种可能的消息类型
-      const messageTypes = ['webviewReloaded', 'contentUpdated', 'documentChanged'];
-
-      if (event.data && messageTypes.includes(event.data.type)) {
-        console.log(`[LayoutModeSection] Received ${event.data.type} message, attempting restore`);
-
-        setTimeout(() => {
-          if (this.attemptRestore(selectionManager, `message-${event.data.type}`)) {
-            this.clearRestoreAttempts();
-          }
-        }, 150);
-      }
-    };
-
-    window.addEventListener('message', this.selectionRestoreListener);
-  }
-
-  /**
-   * 设置持续监控，定期检查选择状态
-   */
-  setupContinuousMonitoring(selectionManager) {
-    // 清理之前的监控
-    if (this.continuousMonitorInterval) {
-      clearInterval(this.continuousMonitorInterval);
-    }
-
-    console.log(`[LayoutModeSection] Setting up continuous monitoring`);
-
-    this.continuousMonitorInterval = setInterval(() => {
-      if (!this.preservedSelection) {
-        return; // 没有需要恢复的选择
-      }
-
-      // 检查当前是否有选中的元素
-      const currentSelected = document.querySelectorAll('[wve-selected]');
-      const selectionManagerSelected = selectionManager.getSelected();
-
-      console.log(`[LayoutModeSection] Monitoring check: DOM=${currentSelected.length}, Manager=${selectionManagerSelected.size} selected`);
-
-      // 如果没有选中的元素，尝试恢复
-      if (currentSelected.length === 0 && selectionManagerSelected.size === 0) {
-        console.log(`[LayoutModeSection] Continuous monitoring detected selection loss, attempting restore`);
-        if (this.attemptRestore(selectionManager, 'continuous-monitor')) {
-          // 恢复成功，清理监控
-          this.clearRestoreAttempts();
-        }
-      }
-    }, 1000); // 每秒检查一次
-  }
-
-  /**
-   * 清理所有恢复尝试
-   */
-  clearRestoreAttempts() {
-    // 清理定时器
-    if (this.restoreAttemptTimers) {
-      this.restoreAttemptTimers.forEach(timer => clearTimeout(timer));
-      this.restoreAttemptTimers = [];
-    }
-
-    // 清理DOM观察器
-    if (this.domObserver) {
-      this.domObserver.disconnect();
-      this.domObserver = null;
-    }
-
-    // 清理消息监听器
-    if (this.selectionRestoreListener) {
-      window.removeEventListener('message', this.selectionRestoreListener);
-      this.selectionRestoreListener = null;
-    }
-
-    // 清理持续监控
-    if (this.continuousMonitorInterval) {
-      clearInterval(this.continuousMonitorInterval);
-      this.continuousMonitorInterval = null;
-    }
-
-    // 清理保存的选择状态
-    this.preservedSelection = null;
-
-    // 注意：不在这里清除 sessionStorage，让 WebView 重新加载后的恢复机制来处理
-
-    console.log(`[LayoutModeSection] Cleared all restore attempts and monitoring`);
-  }
-
-  /**
-   * 恢复选中状态
-   */
-  restoreSelectionState(preservedSelection, selectionManager) {
-    console.log(`[LayoutModeSection] ===== RESTORE SELECTION STATE START =====`);
-
-    if (!preservedSelection || !selectionManager) {
-      console.warn(`[LayoutModeSection] Cannot restore selection - missing data or manager`, {
-        preservedSelection: !!preservedSelection,
-        selectionManager: !!selectionManager
-      });
-      return;
-    }
-
-    console.log(`[LayoutModeSection] Attempting to restore ${preservedSelection.length} elements`);
-    console.log(`[LayoutModeSection] Current DOM state check...`);
-
-    // 检查当前DOM中的元素状态
-    const allElementsWithWveId = document.querySelectorAll('[data-wve-id]');
-    console.log(`[LayoutModeSection] Current DOM has ${allElementsWithWveId.length} elements with wve-id`);
-
-    const currentSelectedElements = document.querySelectorAll('[wve-selected]');
-    console.log(`[LayoutModeSection] Current DOM has ${currentSelectedElements.length} selected elements`);
-
-    // 先清除现有选择，确保干净的状态
-    selectionManager.clearSelection();
-    console.log(`[LayoutModeSection] Cleared existing selection`);
-
-    let restoredCount = 0;
-
-    preservedSelection.forEach((preserved, index) => {
-      console.log(`[LayoutModeSection] Restoring element ${index + 1}/${preservedSelection.length}:`);
-      console.log(`[LayoutModeSection]   - wveId: ${preserved.wveId}`);
-      console.log(`[LayoutModeSection]   - selector: ${preserved.selector}`);
-      console.log(`[LayoutModeSection]   - tagName: ${preserved.tagName}`);
-
-      let targetElement = null;
-
-      // 尝试通过 wveId 查找
-      if (preserved.wveId) {
-        targetElement = document.querySelector(`[data-wve-id="${preserved.wveId}"]`);
-        console.log(`[LayoutModeSection]   - Search by wveId "${preserved.wveId}":`, targetElement ? 'FOUND' : 'NOT FOUND');
-        if (targetElement) {
-          console.log(`[LayoutModeSection]     Found element:`, {
-            tagName: targetElement.tagName,
-            className: targetElement.className,
-            id: targetElement.id,
-            hasWveSelected: targetElement.hasAttribute('wve-selected')
-          });
-        }
-      }
-
-      // 如果通过 wveId 找不到，尝试使用选择器
-      if (!targetElement && preserved.selector) {
-        try {
-          targetElement = document.querySelector(preserved.selector);
-          console.log(`[LayoutModeSection]   - Search by selector "${preserved.selector}":`, targetElement ? 'FOUND' : 'NOT FOUND');
-          if (targetElement) {
-            console.log(`[LayoutModeSection]     Found element by selector:`, {
-              tagName: targetElement.tagName,
-              className: targetElement.className,
-              id: targetElement.id,
-              wveId: targetElement.dataset.wveId
-            });
-          }
-        } catch (e) {
-          console.warn(`[LayoutModeSection]   - Selector error:`, preserved.selector, e);
-        }
-      }
-
-      // 恢复选中状态
-      if (targetElement && selectionManager) {
-        console.log(`[LayoutModeSection]   - RESTORING selection for element ${index + 1}`);
-        try {
-          // 使用 emit=false 避免触发过多的选择变更事件，除了最后一个元素
-          const shouldEmit = index === preservedSelection.length - 1;
-          selectionManager.select(targetElement, shouldEmit);
-          restoredCount++;
-
-          // 验证选择是否成功
-          const isSelected = targetElement.hasAttribute('wve-selected');
-          console.log(`[LayoutModeSection]     Selection success: ${isSelected}`);
-        } catch (error) {
-          console.error(`[LayoutModeSection]     Selection failed:`, error);
-        }
-      } else {
-        console.warn(`[LayoutModeSection]   - FAILED to restore element ${index + 1}:`, {
-          targetElement: !!targetElement,
-          selectionManager: !!selectionManager,
-          preserved
-        });
-      }
-    });
-
-    console.log(`[LayoutModeSection] Selection restoration completed: ${restoredCount}/${preservedSelection.length} elements restored`);
-
-    // 验证最终状态
-    const finalSelectedElements = document.querySelectorAll('[wve-selected]');
-    console.log(`[LayoutModeSection] Final verification: ${finalSelectedElements.length} elements now selected`);
-
-    // 强制更新属性面板以反映恢复的选择
-    if (restoredCount > 0) {
-      console.log(`[LayoutModeSection] Updating property panel...`);
-      setTimeout(() => {
-        const app = window.WVE?.app?.();
-        if (app && app.propertyPanel && app.selectionManager) {
-          const selected = app.selectionManager.getSelected();
-          console.log(`[LayoutModeSection] SelectionManager reports ${selected.size} selected elements`);
-
-          if (selected.size > 0) {
-            const lastSelected = Array.from(selected)[selected.size - 1];
-            console.log(`[LayoutModeSection] Updating property panel with element:`, lastSelected);
-            app.propertyPanel.updateForElement(lastSelected);
-            console.log(`[LayoutModeSection] Property panel update completed`);
-          } else {
-            console.warn(`[LayoutModeSection] No elements in selection manager after restore`);
-          }
-        } else {
-          console.error(`[LayoutModeSection] Cannot update property panel - missing app/propertyPanel/selectionManager`);
-        }
-      }, 50);
-    } else {
-      console.warn(`[LayoutModeSection] No elements were restored, property panel will show empty state`);
-    }
-
-    console.log(`[LayoutModeSection] ===== RESTORE SELECTION STATE END =====`);
-  }
-
-  /**
-   * 生成可靠的元素选择器用于恢复选择
-   */
-  generateElementSelector(element) {
-    // 优先使用 data-wve-id
-    if (element.dataset.wveId) {
-      return `[data-wve-id="${element.dataset.wveId}"]`;
-    }
-
-    // 其次使用 ID
-    if (element.id) {
-      return `#${element.id}`;
-    }
-
-    // 最后使用 nth-child 路径
-    return this.generateNthChildSelector(element);
-  }
-
-  /**
    * 生成元素选择器策略
    */
   generateSelectorStrategies(element) {
@@ -1759,29 +1559,6 @@ window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.Proper
         selector: nthChildSelector
       });
     }
-
-    // 策略4: 使用标签名 + 类名（简化版，避免过于复杂的选择器）
-    if (element.className) {
-      const simpleClasses = element.className.trim().split(/\s+/)
-        .filter(cls =>
-          !cls.startsWith('wve-') && // 排除扩展添加的类
-          !cls.includes(':') &&     // 排除包含冒号的Tailwind类
-          cls.length < 20           // 排除过长的类名
-        );
-
-      if (simpleClasses.length > 0) {
-        strategies.push({
-          type: 'tag-class',
-          selector: `${element.tagName.toLowerCase()}.${simpleClasses[0]}`
-        });
-      }
-    }
-
-    // 策略5: 只使用标签名（最后的回退）
-    strategies.push({
-      type: 'tag',
-      selector: element.tagName.toLowerCase()
-    });
 
     return strategies;
   }
@@ -1829,21 +1606,6 @@ window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.Proper
   }
 
   /**
-   * 派发定位变更事件
-   */
-  dispatchPositionChangeEvent(newPosition, prevPosition) {
-    const event = new CustomEvent('wvePositionChange', {
-      detail: {
-        element: this.currentElement,
-        newPosition: newPosition,
-        prevPosition: prevPosition,
-        positionTypes: this.positionTypes
-      }
-    });
-    document.dispatchEvent(event);
-  }
-
-  /**
    * 派发布局变更事件
    */
   dispatchLayoutChangeEvent(newLayout, prevLayout) {
@@ -1859,26 +1621,10 @@ window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.Proper
   }
 
   /**
-   * 获取当前定位类型
-   */
-  getCurrentPosition() {
-    return this.currentPosition;
-  }
-
-  /**
    * 获取当前布局方式
    */
   getCurrentLayout() {
     return this.currentLayout;
-  }
-
-  /**
-   * 以编程方式设置定位类型
-   */
-  setPosition(position) {
-    if (this.positionTypes[position]) {
-      this.selectPosition(position);
-    }
   }
 
   /**
@@ -1928,152 +1674,41 @@ window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.Proper
         margin-bottom: 8px;
       }
 
-      .position-selector-container,
       .layout-selector-container {
-        margin-bottom: 12px;
+        margin-bottom: 16px;
       }
 
-      .divider {
-        height: 1px;
-        background: #404040;
-        margin: 16px 0;
+      .dimensions-section,
+      .layout-params-section,
+      .spacing-section {
+        padding-bottom: 8px;
+        border-bottom: 1px solid #404040;
+        margin-bottom: 16px;
       }
 
-      .settings-description-container {
-        background: #363636;
-        border-radius: 4px;
-        padding: 8px;
-        border: 1px solid #404040;
-      }
-
-      .settings-desc-row {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 4px;
-      }
-
-      .settings-desc-row:last-child {
+      .dimensions-section:last-child,
+      .layout-params-section:last-child,
+      .spacing-section:last-child {
+        border-bottom: none;
         margin-bottom: 0;
       }
 
-      .settings-desc-label {
-        font-size: 10px;
-        color: #999999;
+      /* 自定义滚动条 */
+      .layout-mode-section ::-webkit-scrollbar {
+        width: 4px;
       }
 
-      .settings-desc-value {
-        font-size: 10px;
-        color: #cccccc;
-        font-weight: 500;
-      }
-
-      /* 位置设置控件样式 */
-      .position-values-container {
-        margin-bottom: 12px;
-      }
-
-      .position-values-grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 8px;
-        margin-bottom: 12px;
-      }
-
-      .position-input-group {
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-      }
-
-      .position-input-label {
-        display: flex;
-        align-items: center;
-        gap: 4px;
-        font-size: 10px;
-        color: #cccccc;
-      }
-
-      .position-icon {
-        color: #999999;
-      }
-
-      .position-label-text {
-        font-weight: 500;
-      }
-
-      .position-input-container {
-        display: flex;
-        align-items: center;
-        gap: 2px;
+      .layout-mode-section ::-webkit-scrollbar-track {
         background: #1e1e1e;
-        border: 1px solid #404040;
-        border-radius: 3px;
-        overflow: hidden;
       }
 
-      .position-input {
-        flex: 1;
-        height: 22px;
-        background: transparent;
-        border: none;
-        color: #ffffff;
-        font-size: 10px;
-        padding: 2px 6px;
-        outline: none;
-        border:none
+      .layout-mode-section ::-webkit-scrollbar-thumb {
+        background: #404040;
+        border-radius: 2px;
       }
 
-      .position-input::placeholder {
-        color: #666666;
-      }
-
-      .position-unit-select {
-        height: 22px;
-        background: #2c2c2c;
-        border: none;
-        border-left: 1px solid #404040;
-        color: #cccccc;
-        font-size: 9px;
-        padding: 0 4px;
-        outline: none;
-        cursor: pointer;
-      }
-
-      .position-unit-select:hover {
-        background: #363636;
-      }
-
-      /* 快捷值按钮 */
-      .position-quick-values {
-        display: grid;
-        grid-template-columns: repeat(4, 1fr);
-        gap: 4px;
-      }
-
-      .quick-value-btn {
-        height: 20px;
-        background: #2c2c2c;
-        border: 1px solid #404040;
-        border-radius: 3px;
-        color: #cccccc;
-        font-size: 9px;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transition: all 0.2s ease;
-      }
-
-      .quick-value-btn:hover {
-        background: #363636;
-        border-color: #505050;
-        color: #ffffff;
-      }
-
-      .quick-value-btn:active {
-        background: #1e1e1e;
-        transform: translateY(1px);
+      .layout-mode-section ::-webkit-scrollbar-thumb:hover {
+        background: #505050;
       }
     `;
 
@@ -2090,9 +1725,6 @@ window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.Proper
    * 清理资源，包括定时器和事件监听器
    */
   destroy() {
-    // 清理所有恢复尝试
-    this.clearRestoreAttempts();
-
     // 清理防抖定时器
     if (this.syncDebounceTimer) {
       clearTimeout(this.syncDebounceTimer);
@@ -2100,7 +1732,6 @@ window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.Proper
     }
 
     // 清理保存的选择状态
-    this.preservedSelection = null;
     this.currentElement = null;
 
     console.log(`[LayoutModeSection] Resources cleaned up`);
