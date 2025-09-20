@@ -935,7 +935,15 @@ window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.Proper
   }
 
   updateDimension(type, value) {
-    this.dimensions[type] = value;
+    // 如果输入的是纯数字，需要加上当前选择的单位
+    if (value && /^\d+$/.test(value)) {
+      // 获取当前选择的单位
+      const unitSelect = this.element.querySelector(`select[data-dimension-unit="${type}"]`);
+      const currentUnit = unitSelect ? unitSelect.value : 'px'; // 默认使用 px
+      this.dimensions[type] = value + currentUnit;
+    } else {
+      this.dimensions[type] = value;
+    }
     this.applyDimensions();
   }
 
@@ -951,10 +959,19 @@ window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.Proper
   }
 
   updateSpacing(type, value, unified = false) {
+    // 如果输入的是纯数字，需要加上当前选择的单位
+    let finalValue = value;
+    if (value && /^\d+$/.test(value)) {
+      // 获取当前选择的单位
+      const unitSelect = this.element.querySelector(`select[data-spacing-unit="${type}"]`);
+      const currentUnit = unitSelect ? unitSelect.value : 'px'; // 默认使用 px
+      finalValue = value + currentUnit;
+    }
+
     if (unified) {
       // 统一设置所有方向
       ['top', 'right', 'bottom', 'left'].forEach(direction => {
-        this.spacing[type][direction] = value;
+        this.spacing[type][direction] = finalValue;
       });
     }
     this.applySpacing();
@@ -979,7 +996,16 @@ window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.Proper
   }
 
   updateDirectionalSpacing(type, direction, value) {
-    this.spacing[type][direction] = value;
+    // 如果输入的是纯数字，需要加上当前选择的单位
+    let finalValue = value;
+    if (value && /^\d+$/.test(value)) {
+      // 获取当前选择的单位
+      const unitSelect = this.element.querySelector(`select[data-directional-spacing-unit="${type}-${direction}"]`);
+      const currentUnit = unitSelect ? unitSelect.value : 'px'; // 默认使用 px
+      finalValue = value + currentUnit;
+    }
+
+    this.spacing[type][direction] = finalValue;
     this.spacing[type].unified = false;
     this.applySpacing();
   }
@@ -1128,6 +1154,9 @@ window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.Proper
     const element = this.currentElement;
     const classes = [];
 
+    // 先移除所有现有的尺寸类，然后重新应用
+    this.clearExistingDimensionClasses(element);
+
     // 构建尺寸相关的 Tailwind 类
     Object.entries(this.dimensions).forEach(([prop, value]) => {
       if (value) {
@@ -1247,15 +1276,11 @@ window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.Proper
       return `${prefix}-auto`;
     }
 
-    // 检查是否为标准 Tailwind 数值（如 20, 64 等）
-    if (/^\d+$/.test(value)) {
-      return `${prefix}-${value}`;
-    }
-
     // 对于带单位的值或其他值，使用任意值语法
     // 确保值包含单位，如果没有单位则添加 px
     let finalValue = value;
     if (/^\d+$/.test(value)) {
+      // 纯数字，添加默认单位 px
       finalValue = value + 'px';
     } else if (!/^(auto|inherit|initial|unset)$/.test(value) && !/\d+(px|%|em|rem|vw|vh|fr)$/.test(value)) {
       // 如果值不包含单位且不是关键字，添加默认单位 px
@@ -1386,8 +1411,10 @@ window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.Proper
             // 任意值语法 w-[30px]
             this.dimensions[prop] = value.slice(1, -1);
           } else if (/^\d+$/.test(value)) {
-            // 标准 Tailwind 数值 w-20
-            this.dimensions[prop] = value;
+            // 标准 Tailwind 数值 w-20 -> 转换为像素值
+            // Tailwind 的数值单位是 0.25rem，即 4px
+            const pixelValue = parseInt(value) * 4;
+            this.dimensions[prop] = pixelValue + 'px';
           } else {
             // 其他预设值
             this.dimensions[prop] = value;
@@ -1405,7 +1432,13 @@ window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.Proper
     Object.entries(this.dimensions).forEach(([type, value]) => {
       const input = this.element.querySelector(`input[data-dimension="${type}"]`);
       if (input) {
-        input.value = value || '';
+        // 如果值包含单位，提取数值部分显示在输入框中
+        if (value && value !== 'auto') {
+          const numericValue = value.replace(/[a-zA-Z%]+$/, '');
+          input.value = numericValue || '';
+        } else {
+          input.value = value || '';
+        }
       }
 
       // 更新单位选择器
@@ -1415,8 +1448,8 @@ window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.Proper
         const unitMatch = value.match(/[a-zA-Z%]+$/);
         if (unitMatch) {
           unitSelect.value = unitMatch[0];
-        } else if (/^\d+$/.test(value)) {
-          // 标准 Tailwind 数值，单位设为 'px'（作为默认显示）
+        } else {
+          // 没有单位的数值，默认设为 'px'
           unitSelect.value = 'px';
         }
       }
@@ -1718,6 +1751,36 @@ window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.Proper
     } else {
       // 回退到 document.head（非 Shadow DOM 环境）
       document.head.appendChild(style);
+    }
+  }
+
+  /**
+   * 清除元素上现有的尺寸类
+   */
+  clearExistingDimensionClasses(element) {
+    if (!element) {
+      return;
+    }
+
+    // 定义所有尺寸相关的类前缀
+    const dimensionPrefixes = [
+      'w-', 'h-', 'min-w-', 'min-h-', 'max-w-', 'max-h-'
+    ];
+
+    // 获取当前所有类名
+    const classList = Array.from(element.classList);
+
+    // 找出所有需要移除的尺寸类
+    const classesToRemove = classList.filter(className => {
+      return dimensionPrefixes.some(prefix => className.startsWith(prefix));
+    });
+
+    // 移除找到的尺寸类
+    if (classesToRemove.length > 0) {
+      console.log(`[LayoutModeSection] Clearing existing dimension classes:`, classesToRemove);
+      classesToRemove.forEach(className => {
+        element.classList.remove(className);
+      });
     }
   }
 

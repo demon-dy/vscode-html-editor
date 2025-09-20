@@ -322,6 +322,9 @@ window.WVE.LayoutAdapter = class LayoutAdapter {
       'top-1/2': ['top-0', 'top-auto']
     };
 
+    // 处理尺寸类的冲突（动态检测）
+    this.removeDimensionConflicts(element, newClass);
+
     if (conflicts[newClass]) {
       conflicts[newClass].forEach(conflictClass => {
         if (element.classList.contains(conflictClass)) {
@@ -475,6 +478,99 @@ window.WVE.LayoutAdapter = class LayoutAdapter {
 
     if (this.uiManager) {
       this.uiManager.syncTailwindStyles();
+    }
+  }
+
+  /**
+   * 移除尺寸相关的冲突类
+   */
+  removeDimensionConflicts(element, newClass) {
+    // 定义尺寸属性前缀和它们的冲突范围
+    const dimensionPrefixes = {
+      'w-': 'width',
+      'h-': 'height',
+      'min-w-': 'min-width',
+      'min-h-': 'min-height',
+      'max-w-': 'max-width',
+      'max-h-': 'max-height',
+      'm-': 'margin',
+      'mt-': 'margin-top',
+      'mr-': 'margin-right',
+      'mb-': 'margin-bottom',
+      'ml-': 'margin-left',
+      'mx-': 'margin-horizontal',
+      'my-': 'margin-vertical',
+      'p-': 'padding',
+      'pt-': 'padding-top',
+      'pr-': 'padding-right',
+      'pb-': 'padding-bottom',
+      'pl-': 'padding-left',
+      'px-': 'padding-horizontal',
+      'py-': 'padding-vertical'
+    };
+
+    // 检查新类是否是尺寸类
+    let currentPrefix = null;
+    let currentProperty = null;
+
+    for (const [prefix, property] of Object.entries(dimensionPrefixes)) {
+      if (newClass.startsWith(prefix)) {
+        currentPrefix = prefix;
+        currentProperty = property;
+        break;
+      }
+    }
+
+    if (!currentPrefix) {
+      return; // 不是尺寸类，无需处理
+    }
+
+    // 移除所有具有相同前缀的现有类（排除当前要添加的类）
+    const classList = Array.from(element.classList);
+    const conflictingClasses = classList.filter(className => {
+      return className.startsWith(currentPrefix) && className !== newClass;
+    });
+
+    if (conflictingClasses.length > 0) {
+      this.logger.debug(`Removing conflicting ${currentProperty} classes:`, conflictingClasses);
+      conflictingClasses.forEach(className => {
+        element.classList.remove(className);
+      });
+    }
+
+    // 特殊处理：移除相关的冲突
+    this.handleSpecialDimensionConflicts(element, newClass, currentProperty);
+  }
+
+  /**
+   * 处理特殊的尺寸冲突情况
+   */
+  handleSpecialDimensionConflicts(element, newClass, property) {
+    // 如果设置了具体的margin值，移除auto相关的类
+    if (property.includes('margin')) {
+      if (newClass.includes('m-') && !newClass.includes('auto')) {
+        element.classList.remove('mx-auto', 'my-auto', 'ml-auto', 'mr-auto', 'mt-auto', 'mb-auto');
+      }
+    }
+
+    // 如果设置了具体的width/height，移除auto相关的类
+    if (property === 'width' && !newClass.includes('auto')) {
+      element.classList.remove('w-auto');
+    }
+    if (property === 'height' && !newClass.includes('auto')) {
+      element.classList.remove('h-auto');
+    }
+
+    // 移除display: block相关的冲突（当设置flex等时）
+    if (property === 'width' || property === 'height') {
+      // 检查是否在设置flex相关的尺寸
+      const isFlexRelated = element.classList.contains('flex') ||
+                          element.classList.contains('inline-flex');
+
+      if (isFlexRelated && (newClass.includes('w-') || newClass.includes('h-'))) {
+        // 在flex容器中设置尺寸时，确保没有冲突的display类
+        element.classList.remove('block', 'inline-block');
+      }
     }
   }
 };
