@@ -147,17 +147,16 @@ window.WVE.PositionSection = class PositionSection extends window.WVE.PropertySe
     quickValues.className = 'position-quick-values';
 
     const quickButtons = [
-      { label: 'Auto', value: 'auto' },
-      { label: '0', value: '0px' },
-      { label: '50%', value: '50%' },
-      { label: 'Clear', value: '' }
+      { label: '0', value: '0', unit: 'px' },
+      { label: '50%', value: '50', unit: '%' },
+      { label: 'Clear', value: '', unit: null }
     ];
 
     quickButtons.forEach(btn => {
       const button = document.createElement('button');
       button.className = 'quick-value-btn';
       button.textContent = btn.label;
-      button.onclick = () => this.applyQuickValue(btn.value);
+      button.onclick = () => this.applyQuickValue(btn.value, btn.unit);
       quickValues.appendChild(button);
     });
 
@@ -195,6 +194,20 @@ window.WVE.PositionSection = class PositionSection extends window.WVE.PropertySe
     input.className = 'position-input';
     input.placeholder = 'auto';
     input.dataset.direction = direction.key;
+
+    // 添加输入验证：只允许数字、小数点和负号
+    input.addEventListener('input', (e) => {
+      const value = e.target.value;
+      // 允许数字、小数点、负号，以及特殊关键词
+      if (value && !value.match(/^-?\d*\.?\d*$/) && !['auto', 'inherit', 'initial', 'unset'].includes(value)) {
+        // 如果输入不符合要求，恢复到上一个有效值
+        e.target.value = e.target.dataset.lastValidValue || '';
+      } else {
+        // 保存有效值
+        e.target.dataset.lastValidValue = value;
+      }
+    });
+
     input.addEventListener('change', (e) => {
       this.updatePositionValue(direction.key, e.target.value);
     });
@@ -302,15 +315,24 @@ window.WVE.PositionSection = class PositionSection extends window.WVE.PropertySe
   /**
    * 应用快捷值到所有方向
    */
-  applyQuickValue(value) {
+  applyQuickValue(value, unit = null) {
     if (!this.positionInputs) {
       return;
     }
 
     Object.keys(this.positionInputs).forEach(direction => {
-      const input = this.positionInputs[direction].input;
+      const { input, unitSelect } = this.positionInputs[direction];
+
+      // 设置输入框值（只设置数值部分）
       input.value = value;
-      this.updatePositionValue(direction, value);
+
+      // 如果指定了单位，则更新单位选择器
+      if (unit && unitSelect) {
+        unitSelect.value = unit;
+      }
+
+      // 更新位置值，传入单位信息
+      this.updatePositionValue(direction, value, unit);
     });
   }
 
@@ -772,14 +794,11 @@ window.WVE.PositionSection = class PositionSection extends window.WVE.PropertySe
 
       console.log(`[PositionSection] Detected position: ${detectedPosition}`);
 
-      let updated = false;
-
       // 更新定位类型
       if (detectedPosition !== this.currentPosition) {
         this.currentPosition = detectedPosition;
         this.updatePositionButtons();
         this.updatePositionValuesVisibility();
-        updated = true;
       }
 
       // 更新位置值
@@ -1053,6 +1072,7 @@ window.WVE.PositionSection = class PositionSection extends window.WVE.PropertySe
         outline: none;
         width: 45px;
         box-sizing: border-box;
+        flex:1;
       }
 
       .position-input::placeholder {
@@ -1073,6 +1093,7 @@ window.WVE.PositionSection = class PositionSection extends window.WVE.PropertySe
         width: 42px;
         min-width: 32px;
         box-sizing: border-box;
+        flex:1;
       }
 
       .position-unit-select:hover {

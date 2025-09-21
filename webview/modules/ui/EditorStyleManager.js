@@ -62,12 +62,26 @@ window.WVE.EditorStyleManager = class EditorStyleManager {
         }
 
         [wve-selected] {
-          box-shadow: 0 0 0 2px color-mix(in srgb, currentColor, transparent 30%);
+          box-shadow:
+            0 0 0 2px #007acc,
+            0 0 0 4px rgba(0, 122, 204, 0.4),
+            0 0 0 6px rgba(0, 122, 204, 0.2),
+            0 0 8px 8px rgba(0, 122, 204, 0.1);
+          outline: none;
+          position: relative;
+          z-index: 9999 !important;
         }
 
         [wve-selected][wve-movable] {
           cursor: grab;
-          box-shadow: 0 0 0 2px var(--vscode-editorWarning-foreground);
+          box-shadow:
+            0 0 0 2px #ff9500,
+            0 0 0 4px rgba(255, 149, 0, 0.5),
+            0 0 0 6px rgba(255, 149, 0, 0.3),
+            0 0 8px 8px rgba(255, 149, 0, 0.15);
+          outline: none;
+          position: relative;
+          z-index: 9999 !important;
         }
 
         [wve-selected][wve-movable]:active {

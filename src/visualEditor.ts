@@ -682,9 +682,13 @@ export class VisualEditorProvider implements vscode.CustomTextEditorProvider {
 
           // 布局模式选择器（核心组件，包含完整布局管理功能）
           { path: 'modules/ui/property-panel/LayoutModeSection.js', description: '综合布局管理区域' },
+          // 样式属性组件
+          { path: 'modules/ui/property-panel/AppearanceSection.js', description: '外观设置区域' },
+          { path: 'modules/ui/property-panel/FillSection.js', description: '填充设置区域' },
+          { path: 'modules/ui/property-panel/StrokeSection.js', description: '边框设置区域' },
+          { path: 'modules/ui/property-panel/EffectsSection.js', description: '特效设置区域' },
+          { path: 'modules/ui/property-panel/TypographySection.js', description: '排版设置区域' },
 
-          // 样式属性标签页
-          { path: 'modules/ui/property-panel/StyleTabsSection.js', description: '样式属性标签页区域' },
 
           // 主面板管理器（必须最后加载）
           { path: 'modules/ui/property-panel/PropertyPanel.js', description: '新属性面板主类' },

@@ -313,16 +313,51 @@ window.WVE.PropertyPanel = class PropertyPanel {
     divider1.className = 'panel-section-divider';
     this.content.appendChild(divider1);
 
-    // 3. 创建样式属性标签页（底部）
-    this.logger.info('PropertyPanel: Creating style tabs section');
-    this.sections.styleTabs = new window.WVE.StyleTabsSection({
-      collapsed: this.persisted.sections.styleTabs?.collapsed || false,
+    // 3. 创建样式属性区域（直接渲染五个子区域）
+    this.logger.info('PropertyPanel: Creating style property sections');
+
+    // 3.1 外观区域
+    this.sections.appearance = new window.WVE.AppearanceSection({
+      collapsed: this.persisted.sections.appearance?.collapsed || false,
       uiManager: this.uiManager
     });
+    const appearanceElement = this.sections.appearance.createElement();
+    this.content.appendChild(appearanceElement);
 
-    const styleTabsElement = this.sections.styleTabs.createElement();
-    this.content.appendChild(styleTabsElement);
-    this.logger.info('PropertyPanel: Style tabs section created and appended');
+    // 3.2 填充区域
+    this.sections.fill = new window.WVE.FillSection({
+      collapsed: this.persisted.sections.fill?.collapsed || false,
+      uiManager: this.uiManager
+    });
+    const fillElement = this.sections.fill.createElement();
+    this.content.appendChild(fillElement);
+
+    // 3.3 边框区域
+    this.sections.stroke = new window.WVE.StrokeSection({
+      collapsed: this.persisted.sections.stroke?.collapsed || false,
+      uiManager: this.uiManager
+    });
+    const strokeElement = this.sections.stroke.createElement();
+    this.content.appendChild(strokeElement);
+
+    // 3.5 排版区域
+    this.sections.typography = new window.WVE.TypographySection({
+      collapsed: this.persisted.sections.typography?.collapsed || false,
+      uiManager: this.uiManager
+    });
+    const typographyElement = this.sections.typography.createElement();
+    this.content.appendChild(typographyElement);
+    
+    // 3.4 特效区域
+    this.sections.effects = new window.WVE.EffectsSection({
+      collapsed: this.persisted.sections.effects?.collapsed || false,
+      uiManager: this.uiManager
+    });
+    const effectsElement = this.sections.effects.createElement();
+    this.content.appendChild(effectsElement);
+
+
+    this.logger.info('PropertyPanel: All style property sections created and appended');
 
     // 监听折叠状态变化
     Object.values(this.sections).forEach(section => {
@@ -523,9 +558,13 @@ window.WVE.PropertyPanel = class PropertyPanel {
     // LayoutModeSection 现在包含完整的布局管理功能，会自动处理所有布局相关设置
     this.logger.info('PropertyPanel: Layout section updated via update() method');
 
-    // 更新样式属性标签页
-    this.logger.info('PropertyPanel: Updating style tabs');
-    this.sections.styleTabs.update(element);
+    // 更新样式属性区域
+    this.logger.info('PropertyPanel: Updating style property sections');
+    if (this.sections.appearance) this.sections.appearance.update(element);
+    if (this.sections.fill) this.sections.fill.update(element);
+    if (this.sections.stroke) this.sections.stroke.update(element);
+    if (this.sections.effects) this.sections.effects.update(element);
+    if (this.sections.typography) this.sections.typography.update(element);
 
     this.logger.debug('Updated property panel for element:', element.tagName);
   }

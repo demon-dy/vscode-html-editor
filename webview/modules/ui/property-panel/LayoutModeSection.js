@@ -33,12 +33,12 @@ window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.Proper
         name: '自动布局',
         icon: 'split-square-horizontal',
         description: '现代响应式设计 (Flexbox)'
-      },
-      grid: {
-        name: '网格布局',
-        icon: 'grid-3x3',
-        description: '复杂的二维布局 (Grid)'
       }
+      // grid: {
+      //   name: '网格布局',
+      //   icon: 'grid-3x3',
+      //   description: '复杂的二维布局 (Grid)'
+      // }
     };
 
     // 尺寸设置状态
@@ -62,7 +62,7 @@ window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.Proper
       flex: {
         direction: 'row',
         wrap: 'nowrap',
-        justifyContent: 'flex-start',
+        justifyContent: 'start',
         alignItems: 'stretch',
         gap: ''
       },
@@ -70,6 +70,11 @@ window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.Proper
         templateColumns: '',
         templateRows: '',
         gap: '',
+        columnGap: '',
+        rowGap: '',
+        gridColumns: 3, // 默认3列
+        gridRows: 1,    // 默认1行
+        rowHeights: {}, // 存储单独的行高设置
         justifyItems: 'stretch',
         alignItems: 'stretch'
       }
@@ -80,7 +85,8 @@ window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.Proper
       dimensionsExpanded: false,
       spacingExpanded: false,
       clipContent: false,
-      clipExpanded: false
+      clipExpanded: false,
+      gridAdvancedExpanded: false
     };
 
     // 裁剪选项
@@ -695,23 +701,23 @@ window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.Proper
     // 方向选择
     const directionGroup = this.createParamGroup('方向', [
       { value: 'row', label: '水平', icon: 'arrow-right' },
-      { value: 'column', label: '垂直', icon: 'arrow-down' }
+      { value: 'col', label: '垂直', icon: 'arrow-down' }
     ], this.layoutParams.flex.direction, (value) => this.updateFlexParam('direction', value));
 
     // 主轴对齐
-    const justifyGroup = this.createParamGroup('主轴对齐', [
-      { value: 'flex-start', label: '开始', icon: 'align-left' },
+    const justifyGroup = this.createParamGroup('主轴对齐（方向轴）', [
+      { value: 'start', label: '开始', icon: 'align-left' },
       { value: 'center', label: '居中', icon: 'align-center' },
-      { value: 'flex-end', label: '结束', icon: 'align-right' },
-      { value: 'space-between', label: '两端', icon: 'space-between-horizontal' }
+      { value: 'end', label: '结束', icon: 'align-right' },
+      { value: 'between', label: '两端', icon: 'space-between-horizontal' }
     ], this.layoutParams.flex.justifyContent, (value) => this.updateFlexParam('justifyContent', value));
 
     // 交叉轴对齐
-    const alignGroup = this.createParamGroup('交叉轴对齐', [
+    const alignGroup = this.createParamGroup('交叉轴对齐（垂直方向的轴）', [
       { value: 'stretch', label: '拉伸', icon: 'maximize' },
-      { value: 'flex-start', label: '开始', icon: 'align-start-vertical' },
+      { value: 'start', label: '开始', icon: 'align-start-vertical' },
       { value: 'center', label: '居中', icon: 'align-center-vertical' },
-      { value: 'flex-end', label: '结束', icon: 'align-end-vertical' }
+      { value: 'end', label: '结束', icon: 'align-end-vertical' }
     ], this.layoutParams.flex.alignItems, (value) => this.updateFlexParam('alignItems', value));
 
     // 间距设置
@@ -734,22 +740,107 @@ window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.Proper
     title.className = 'section-title mb-2';
     title.textContent = 'Grid 布局参数';
 
-    // 网格模板
-    const templatesGroup = document.createElement('div');
-    templatesGroup.className = 'grid grid-cols-1 gap-2 mb-3';
+    // 基础行列设置
+    const basicGrid = document.createElement('div');
+    basicGrid.className = 'basic-grid-settings mb-3';
+
+    // 行列数量设置
+    const rowColGroup = document.createElement('div');
+    rowColGroup.className = 'grid grid-cols-2 gap-2 mb-2';
+
+    const colCountInput = this.createGridCountInput('列数', this.getGridCount('columns'), (value) => this.updateGridCount('columns', value));
+    const rowCountInput = this.createGridCountInput('行数', this.getGridCount('rows'), (value) => this.updateGridCount('rows', value));
+
+    rowColGroup.appendChild(colCountInput);
+    rowColGroup.appendChild(rowCountInput);
+
+    // 间距设置
+    const gapGroup = document.createElement('div');
+    gapGroup.className = 'grid grid-cols-2 gap-2 mb-2';
+
+    const columnGapInput = this.createGapInput('columnGap', '列间距', this.layoutParams.grid.columnGap || '', (value) => this.updateGridParam('columnGap', value));
+    const rowGapInput = this.createGapInput('rowGap', '行间距', this.layoutParams.grid.rowGap || '', (value) => this.updateGridParam('rowGap', value));
+
+    gapGroup.appendChild(columnGapInput);
+    gapGroup.appendChild(rowGapInput);
+
+    basicGrid.appendChild(rowColGroup);
+    basicGrid.appendChild(gapGroup);
+
+    // 更多设置按钮
+    const moreSection = document.createElement('div');
+    moreSection.className = 'grid-more-section';
+
+    const moreHeader = document.createElement('div');
+    moreHeader.className = 'flex items-center justify-between mb-2';
+
+    const moreTitle = document.createElement('div');
+    moreTitle.className = 'text-xs text-gray-400';
+    moreTitle.textContent = '高级设置';
+
+    const moreBtn = document.createElement('button');
+    moreBtn.className = 'text-xs text-gray-400 hover:text-white transition-colors';
+    moreBtn.textContent = this.uiState.gridAdvancedExpanded ? '收起' : '更多';
+    moreBtn.onclick = () => this.toggleGridAdvancedExpanded();
+
+    moreHeader.appendChild(moreTitle);
+    moreHeader.appendChild(moreBtn);
+
+    // 高级设置内容
+    const advancedContent = document.createElement('div');
+    advancedContent.className = 'grid-advanced-content';
+    advancedContent.style.display = this.uiState.gridAdvancedExpanded ? 'block' : 'none';
+
+    // 自定义模板设置
+    const customTemplatesGroup = document.createElement('div');
+    customTemplatesGroup.className = 'custom-templates mb-3';
+
+    const customTitle = document.createElement('div');
+    customTitle.className = 'text-xs text-gray-400 mb-2';
+    customTitle.textContent = '自定义模板（高级用户）';
 
     const columnsInput = this.createTemplateInput('列模板', 'repeat(3, 1fr)', this.layoutParams.grid.templateColumns, (value) => this.updateGridParam('templateColumns', value));
     const rowsInput = this.createTemplateInput('行模板', 'auto', this.layoutParams.grid.templateRows, (value) => this.updateGridParam('templateRows', value));
 
-    templatesGroup.appendChild(columnsInput);
-    templatesGroup.appendChild(rowsInput);
+    customTemplatesGroup.appendChild(customTitle);
+    customTemplatesGroup.appendChild(columnsInput);
+    customTemplatesGroup.appendChild(rowsInput);
 
-    // 间距设置
-    const gapInput = this.createGapInput('gap', '网格间距', this.layoutParams.grid.gap, (value) => this.updateGridParam('gap', value));
+    // 单独行参数设置
+    if (this.getGridCount('rows') > 1) {
+      const rowSettingsGroup = document.createElement('div');
+      rowSettingsGroup.className = 'row-settings-group mt-3';
+
+      const rowSettingsTitle = document.createElement('div');
+      rowSettingsTitle.className = 'text-xs text-gray-400 mb-2';
+      rowSettingsTitle.textContent = '单独行高度设置';
+
+      const rowSettingsContainer = document.createElement('div');
+      rowSettingsContainer.className = 'row-settings-container space-y-2';
+
+      const rowCount = this.getGridCount('rows');
+      for (let i = 1; i <= rowCount; i++) {
+        const rowInput = this.createRowHeightInput(i, (value) => this.updateRowHeight(i, value));
+        rowSettingsContainer.appendChild(rowInput);
+      }
+
+      rowSettingsGroup.appendChild(rowSettingsTitle);
+      rowSettingsGroup.appendChild(rowSettingsContainer);
+      advancedContent.appendChild(rowSettingsGroup);
+    }
+
+    advancedContent.appendChild(customTemplatesGroup);
+
+    moreSection.appendChild(moreHeader);
+    moreSection.appendChild(advancedContent);
 
     container.appendChild(title);
-    container.appendChild(templatesGroup);
-    container.appendChild(gapInput);
+    container.appendChild(basicGrid);
+    container.appendChild(moreSection);
+
+    // 保存引用
+    this.gridMoreBtn = moreBtn;
+    this.gridAdvancedContainer = advancedContent;
 
     return container;
   }
@@ -810,24 +901,53 @@ window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.Proper
     labelEl.textContent = label;
 
     const inputContainer = document.createElement('div');
-    inputContainer.className = 'flex items-center bg-[#1e1e1e] border border-[#404040] rounded';
+    inputContainer.className = 'position-input-container';
 
     const input = document.createElement('input');
     input.type = 'text';
-    input.className = 'flex-1 bg-transparent text-white text-xs px-2 py-1 outline-none';
+    input.className = 'position-input flex-1';
     input.placeholder = '0';
-    input.value = currentValue || '';
-    input.onchange = (e) => onChange(e.target.value);
+
+    // 解析currentValue，分离数值和单位
+    let numericValue = '';
+    let currentUnit = 'px';
+
+    if (currentValue) {
+      const unitMatch = currentValue.match(/^(\d+(?:\.\d+)?)(px|em|rem|%)?$/);
+      if (unitMatch) {
+        numericValue = unitMatch[1];
+        currentUnit = unitMatch[2] || 'px';
+      } else {
+        numericValue = currentValue;
+      }
+    }
+
+    input.value = numericValue;
+    input.onchange = (e) => {
+      const value = e.target.value;
+      const unit = unitSelect.value;
+      const finalValue = value && /^\d+$/.test(value) ? value + unit : value;
+      onChange(finalValue);
+    };
 
     const unitSelect = document.createElement('select');
-    unitSelect.className = 'bg-[#2c2c2c] text-white text-xs border-l border-[#404040] px-1 py-1 outline-none';
+    unitSelect.className = 'position-unit-select';
 
     ['px', 'em', 'rem', '%'].forEach(unit => {
       const option = document.createElement('option');
       option.value = unit;
       option.textContent = unit;
+      option.selected = unit === currentUnit;
       unitSelect.appendChild(option);
     });
+
+    // 单位变更时也要更新值
+    unitSelect.onchange = (e) => {
+      const value = input.value;
+      const unit = e.target.value;
+      const finalValue = value && /^\d+$/.test(value) ? value + unit : value;
+      onChange(finalValue);
+    };
 
     inputContainer.appendChild(input);
     inputContainer.appendChild(unitSelect);
@@ -1023,13 +1143,25 @@ window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.Proper
   }
 
   updateFlexParam(param, value) {
+    // 对于gap参数，如果是纯数字则添加默认单位
+    if (param === 'gap' && value && /^\d+$/.test(value)) {
+      value = value + 'px';
+    }
     this.layoutParams.flex[param] = value;
     this.applyLayoutParams();
+    // 重新渲染布局参数UI以反映新状态
+    this.updateLayoutParams();
   }
 
   updateGridParam(param, value) {
+    // 对于gap参数，如果是纯数字则添加默认单位
+    if (param === 'gap' && value && /^\d+$/.test(value)) {
+      value = value + 'px';
+    }
     this.layoutParams.grid[param] = value;
     this.applyLayoutParams();
+    // 重新渲染布局参数UI以反映新状态
+    this.updateLayoutParams();
   }
 
   /**
@@ -1217,6 +1349,10 @@ window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.Proper
     if (!this.currentElement) return;
 
     const element = this.currentElement;
+
+    // 先清除所有布局参数相关的类名
+    this.clearLayoutParamClasses(element);
+
     const classes = [];
 
     // 根据布局类型应用参数
@@ -1224,15 +1360,38 @@ window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.Proper
       case 'flex':
         const flexParams = this.layoutParams.flex;
         if (flexParams.direction !== 'row') classes.push(`flex-${flexParams.direction}`);
-        if (flexParams.justifyContent !== 'flex-start') classes.push(`justify-${flexParams.justifyContent}`);
+        if (flexParams.justifyContent !== 'start') classes.push(`justify-${flexParams.justifyContent}`);
         if (flexParams.alignItems !== 'stretch') classes.push(`items-${flexParams.alignItems}`);
         if (flexParams.gap) classes.push(`gap-[${flexParams.gap}]`);
         break;
       case 'grid':
         const gridParams = this.layoutParams.grid;
-        if (gridParams.templateColumns) classes.push(`grid-cols-[${gridParams.templateColumns}]`);
-        if (gridParams.templateRows) classes.push(`grid-rows-[${gridParams.templateRows}]`);
-        if (gridParams.gap) classes.push(`gap-[${gridParams.gap}]`);
+        if (gridParams.templateColumns) {
+          // 替换空格为下划线，因为 Tailwind 任意值语法不允许空格
+          const safeColumns = gridParams.templateColumns.replace(/ /g, '_');
+          classes.push(`grid-cols-[${safeColumns}]`);
+        }
+        if (gridParams.templateRows) {
+          // 替换空格为下划线，因为 Tailwind 任意值语法不允许空格
+          const safeRows = gridParams.templateRows.replace(/ /g, '_');
+          classes.push(`grid-rows-[${safeRows}]`);
+        }
+
+        // 处理间距设置：优先使用单独的行列间距，其次使用统一间距
+        if (gridParams.columnGap && gridParams.rowGap) {
+          // 如果两个间距都设置了，使用 gap-x 和 gap-y
+          classes.push(`gap-x-[${gridParams.columnGap}]`);
+          classes.push(`gap-y-[${gridParams.rowGap}]`);
+        } else if (gridParams.columnGap && !gridParams.rowGap) {
+          // 只设置了列间距
+          classes.push(`gap-x-[${gridParams.columnGap}]`);
+        } else if (!gridParams.columnGap && gridParams.rowGap) {
+          // 只设置了行间距
+          classes.push(`gap-y-[${gridParams.rowGap}]`);
+        } else if (gridParams.gap) {
+          // 使用统一间距
+          classes.push(`gap-[${gridParams.gap}]`);
+        }
         break;
     }
 
@@ -1340,6 +1499,145 @@ window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.Proper
   }
 
   /**
+   * 从元素检测布局参数
+   */
+  detectLayoutParamsFromElement(element) {
+    if (!element) return;
+
+    const classList = Array.from(element.classList);
+
+    console.log(`[LayoutModeSection] Detecting layout params from classList:`, classList);
+
+    // 根据当前布局类型检测相应参数
+    switch (this.currentLayout) {
+      case 'flex':
+        this.detectFlexParamsFromElement(classList);
+        console.log(`[LayoutModeSection] Detected flex params:`, this.layoutParams.flex);
+        break;
+      case 'grid':
+        this.detectGridParamsFromElement(classList);
+        console.log(`[LayoutModeSection] Detected grid params:`, this.layoutParams.grid);
+        break;
+    }
+
+    // 检测完参数后，重新渲染布局参数UI以显示检测到的值
+    setTimeout(() => {
+      this.updateLayoutParams();
+    }, 0);
+  }
+
+  /**
+   * 从类名检测Flex参数
+   */
+  detectFlexParamsFromElement(classList) {
+    // 重置flex参数
+    this.layoutParams.flex = {
+      direction: 'row',
+      wrap: 'nowrap',
+      justifyContent: 'start',
+      alignItems: 'stretch',
+      gap: ''
+    };
+
+    classList.forEach(className => {
+      // 检测方向
+      if (className === 'flex-col') {
+        this.layoutParams.flex.direction = 'col';
+      } else if (className === 'flex-row') {
+        this.layoutParams.flex.direction = 'row';
+      }
+
+      // 检测主轴对齐
+      if (className.startsWith('justify-')) {
+        const value = className.replace('justify-', '');
+        this.layoutParams.flex.justifyContent = value;
+      }
+
+      // 检测交叉轴对齐
+      if (className.startsWith('items-')) {
+        const value = className.replace('items-', '');
+        this.layoutParams.flex.alignItems = value;
+      }
+
+      // 检测gap
+      if (className.startsWith('gap-[') && className.endsWith(']')) {
+        const value = className.slice(5, -1); // 提取 gap-[10px] 中的 10px
+        this.layoutParams.flex.gap = value;
+      }
+    });
+  }
+
+  /**
+   * 从类名检测Grid参数
+   */
+  detectGridParamsFromElement(classList) {
+    // 重置grid参数
+    this.layoutParams.grid = {
+      templateColumns: '',
+      templateRows: '',
+      gap: '',
+      columnGap: '',
+      rowGap: '',
+      gridColumns: 3,
+      gridRows: 1,
+      rowHeights: {},
+      justifyItems: 'stretch',
+      alignItems: 'stretch'
+    };
+
+    classList.forEach(className => {
+      // 检测列模板
+      if (className.startsWith('grid-cols-[') && className.endsWith(']')) {
+        const value = className.slice(12, -1); // 提取 grid-cols-[repeat(3,_1fr)] 中的值
+        // 将下划线替换回空格
+        const actualValue = value.replace(/_/g, ' ');
+        this.layoutParams.grid.templateColumns = actualValue;
+
+        // 尝试从列模板中提取列数
+        const repeatMatch = actualValue.match(/^repeat\((\d+),/);
+        if (repeatMatch) {
+          this.layoutParams.grid.gridColumns = parseInt(repeatMatch[1]);
+        }
+      }
+
+      // 检测行模板
+      if (className.startsWith('grid-rows-[') && className.endsWith(']')) {
+        const value = className.slice(12, -1);
+        // 将下划线替换回空格
+        const actualValue = value.replace(/_/g, ' ');
+        this.layoutParams.grid.templateRows = actualValue;
+
+        // 尝试从行模板中解析行数和单独行高设置
+        const rows = actualValue.split(' ');
+        this.layoutParams.grid.gridRows = rows.length;
+        rows.forEach((rowHeight, index) => {
+          if (rowHeight && rowHeight !== 'auto') {
+            this.layoutParams.grid.rowHeights[index + 1] = rowHeight;
+          }
+        });
+      }
+
+      // 检测统一间距
+      if (className.startsWith('gap-[') && className.endsWith(']')) {
+        const value = className.slice(5, -1); // 提取 gap-[10px] 中的 10px
+        this.layoutParams.grid.gap = value;
+      }
+
+      // 检测列间距
+      if (className.startsWith('gap-x-[') && className.endsWith(']')) {
+        const value = className.slice(7, -1); // 提取 gap-x-[10px] 中的 10px
+        this.layoutParams.grid.columnGap = value;
+      }
+
+      // 检测行间距
+      if (className.startsWith('gap-y-[') && className.endsWith(']')) {
+        const value = className.slice(7, -1); // 提取 gap-y-[10px] 中的 10px
+        this.layoutParams.grid.rowGap = value;
+      }
+    });
+  }
+
+  /**
    * 更新组件以匹配当前元素
    */
   update(element) {
@@ -1358,7 +1656,11 @@ window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.Proper
       if (detectedLayout !== this.currentLayout) {
         this.currentLayout = detectedLayout;
         this.updateLayoutButtons();
-        this.updateLayoutParams();
+        // 先检测布局参数，再渲染UI
+        this.detectLayoutParamsFromElement(element);
+      } else {
+        // 布局方式没变，只需检测和更新布局参数
+        this.detectLayoutParamsFromElement(element);
       }
 
       // 检测和更新尺寸信息
@@ -1755,6 +2057,46 @@ window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.Proper
   }
 
   /**
+   * 清除元素上所有布局参数相关的类名
+   */
+  clearLayoutParamClasses(element) {
+    if (!element) {
+      return;
+    }
+
+    // 定义所有布局参数相关的类前缀
+    const layoutParamPrefixes = [
+      'flex-col', 'flex-row', 'flex-wrap', 'flex-nowrap', 'flex-wrap-reverse',
+      'justify-', 'items-', 'content-', 'self-',
+      'grid-cols-', 'grid-rows-', 'col-', 'row-',
+      'gap-', 'gap-x-', 'gap-y-'
+    ];
+
+    // 获取当前所有类名
+    const classList = Array.from(element.classList);
+
+    // 找出所有需要移除的布局参数类
+    const classesToRemove = classList.filter(className => {
+      return layoutParamPrefixes.some(prefix => {
+        // 对于带连字符的前缀，需要精确匹配或以前缀开头
+        if (prefix.endsWith('-')) {
+          return className.startsWith(prefix);
+        } else {
+          return className === prefix;
+        }
+      });
+    });
+
+    // 移除找到的布局参数类
+    if (classesToRemove.length > 0) {
+      console.log(`[LayoutModeSection] Clearing existing layout param classes:`, classesToRemove);
+      classesToRemove.forEach(className => {
+        element.classList.remove(className);
+      });
+    }
+  }
+
+  /**
    * 清除元素上现有的尺寸类
    */
   clearExistingDimensionClasses(element) {
@@ -1782,6 +2124,149 @@ window.WVE.LayoutModeSection = class LayoutModeSection extends window.WVE.Proper
         element.classList.remove(className);
       });
     }
+  }
+
+  /**
+   * 创建行列数量输入控件
+   */
+  createGridCountInput(label, currentValue, onChange) {
+    const group = document.createElement('div');
+    group.className = 'flex flex-col gap-1';
+
+    const labelEl = document.createElement('div');
+    labelEl.className = 'text-xs text-gray-400 mb-1';
+    labelEl.textContent = label;
+
+    const inputContainer = document.createElement('div');
+    inputContainer.className = 'position-input-container';
+
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.className = 'position-input';
+    input.min = '1';
+    input.max = '12';
+    input.value = currentValue || 1;
+    input.addEventListener('change', (e) => {
+      const value = Math.max(1, Math.min(12, parseInt(e.target.value) || 1));
+      e.target.value = value;
+      onChange(value);
+    });
+
+    inputContainer.appendChild(input);
+
+    group.appendChild(labelEl);
+    group.appendChild(inputContainer);
+
+    return group;
+  }
+
+  /**
+   * 创建单独行高度设置输入控件
+   */
+  createRowHeightInput(rowIndex, onChange) {
+    const group = document.createElement('div');
+    group.className = 'flex flex-col gap-1';
+
+    const labelEl = document.createElement('div');
+    labelEl.className = 'text-xs text-gray-400 mb-1';
+    labelEl.textContent = `第${rowIndex}行高度`;
+
+    const inputContainer = document.createElement('div');
+    inputContainer.className = 'position-input-container';
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'position-input';
+    input.placeholder = 'auto';
+    input.value = this.layoutParams.grid.rowHeights[rowIndex] || '';
+    input.addEventListener('change', (e) => onChange(e.target.value));
+
+    const unitSelect = document.createElement('select');
+    unitSelect.className = 'position-unit-select';
+
+    ['px', 'fr', 'auto', '%', 'em', 'rem'].forEach(unit => {
+      const option = document.createElement('option');
+      option.value = unit;
+      option.textContent = unit;
+      unitSelect.appendChild(option);
+    });
+
+    unitSelect.addEventListener('change', (e) => {
+      const value = input.value;
+      const unit = e.target.value;
+      const finalValue = value && unit !== 'auto' && /^\d+$/.test(value) ? value + unit : (unit === 'auto' ? 'auto' : value);
+      onChange(finalValue);
+    });
+
+    inputContainer.appendChild(input);
+    inputContainer.appendChild(unitSelect);
+
+    group.appendChild(labelEl);
+    group.appendChild(inputContainer);
+
+    return group;
+  }
+
+  /**
+   * 获取当前行列数量
+   */
+  getGridCount(type) {
+    if (type === 'columns') {
+      return this.layoutParams.grid.gridColumns;
+    } else if (type === 'rows') {
+      return this.layoutParams.grid.gridRows;
+    }
+    return 1;
+  }
+
+  /**
+   * 更新行列数量
+   */
+  updateGridCount(type, value) {
+    if (type === 'columns') {
+      this.layoutParams.grid.gridColumns = value;
+      // 根据列数自动生成模板
+      this.layoutParams.grid.templateColumns = `repeat(${value}, 1fr)`;
+    } else if (type === 'rows') {
+      this.layoutParams.grid.gridRows = value;
+      // 根据行数自动生成模板，考虑已有的单独行高设置
+      const rowHeights = this.layoutParams.grid.rowHeights;
+      const rowTemplate = [];
+      for (let i = 1; i <= value; i++) {
+        rowTemplate.push(rowHeights[i] || 'auto');
+      }
+      this.layoutParams.grid.templateRows = rowTemplate.join(' ');
+    }
+
+    this.applyLayoutParams();
+    // 重新渲染以显示新的行设置选项
+    this.updateLayoutParams();
+  }
+
+  /**
+   * 更新单独行高度
+   */
+  updateRowHeight(rowIndex, value) {
+    this.layoutParams.grid.rowHeights[rowIndex] = value;
+
+    // 重新构建行模板
+    const rowCount = this.layoutParams.grid.gridRows;
+    const rowTemplate = [];
+    for (let i = 1; i <= rowCount; i++) {
+      rowTemplate.push(this.layoutParams.grid.rowHeights[i] || 'auto');
+    }
+    this.layoutParams.grid.templateRows = rowTemplate.join(' ');
+
+    this.applyLayoutParams();
+  }
+
+  /**
+   * 切换 Grid 高级设置展开状态
+   */
+  toggleGridAdvancedExpanded() {
+    this.uiState.gridAdvancedExpanded = !this.uiState.gridAdvancedExpanded;
+    this.gridMoreBtn.textContent = this.uiState.gridAdvancedExpanded ? '收起' : '更多';
+    this.gridAdvancedContainer.style.display = this.uiState.gridAdvancedExpanded ? 'block' : 'none';
   }
 
   /**
