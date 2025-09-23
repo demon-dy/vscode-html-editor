@@ -43,7 +43,7 @@ function release() {
     // 3. 执行 vsce package
     console.log('📦 执行 vsce package...');
     try {
-      execSync('vsce package', { stdio: 'inherit', cwd: path.join(__dirname, '..') });
+      execSync('NODE_OPTIONS="" vsce package --no-dependencies', { stdio: 'inherit', cwd: path.join(__dirname, '..') });
       console.log('✅ 打包完成\n');
     } catch (error) {
       console.error('❌ vsce package 失败');
