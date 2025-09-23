@@ -569,6 +569,9 @@ export class VisualEditorProvider implements vscode.CustomTextEditorProvider {
 
     // 在所有脚本加载后添加 Tailwind 相关配置
     this.addTailwindConfiguration(document);
+
+    // 添加插件样式修复以覆盖 Tailwind 的表单样式
+    this.addPluginStyleOverrides(document);
   }
 
   /**
@@ -594,6 +597,107 @@ export class VisualEditorProvider implements vscode.CustomTextEditorProvider {
   }
 
   /**
+   * 添加插件样式覆盖以修复 Tailwind CSS 冲突
+   */
+  private addPluginStyleOverrides(document: any) {
+    const overrideStyle = document.createElement('style');
+    overrideStyle.id = 'wve-style-overrides';
+    overrideStyle.textContent = `
+      /* 插件样式覆盖 - 使用最高优先级层 */
+      @layer wve-overrides {
+        /* 修复 Tailwind 表单样式冲突 */
+        .property-input,
+        .property-input[type='text'],
+        .property-input[type='number'],
+        .property-input[type='email'],
+        .property-input[type='url'],
+        .property-input[type='password'] {
+          height: 24px !important;
+          background: #1e1e1e !important;
+          border: 1px solid #404040 !important;
+          border-radius: 4px !important;
+          padding: 0 8px !important;
+          color: #ffffff !important;
+          font-size: 11px !important;
+          width: 100% !important;
+          transition: border-color 0.2s !important;
+          appearance: none !important;
+          -webkit-appearance: none !important;
+        }
+
+        .property-input:focus {
+          border-color: #0078d4 !important;
+          outline: none !important;
+        }
+
+        /* 修复按钮样式 */
+        .icon-button {
+          background: #2c2c2c !important;
+          border: 1px solid #404040 !important;
+          border-radius: 3px !important;
+          color: #ffffff !important;
+          cursor: pointer !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          transition: all 0.2s !important;
+        }
+
+        .icon-button:hover {
+          background: #404040 !important;
+        }
+
+        /* 修复下拉菜单样式 */
+        .figma-dropdown {
+          background: #2c2c2c !important;
+          border: 1px solid #404040 !important;
+          border-radius: 4px !important;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4) !important;
+        }
+
+        .dropdown-item {
+          color: #ffffff !important;
+          cursor: pointer !important;
+        }
+
+        /* 修复属性面板样式 */
+        .property-section {
+          border-bottom: 1px solid #404040 !important;
+          background: #2c2c2c !important;
+        }
+
+        .section-header {
+          background: #383838 !important;
+          color: #ffffff !important;
+        }
+
+        .section-content {
+          background: #2c2c2c !important;
+        }
+
+        /* 确保插件的输入框不受 Tailwind 表单重置影响 */
+        .wve-container input,
+        .wve-container textarea,
+        .wve-container select {
+          all: revert !important;
+        }
+
+        .wve-container .property-input {
+          height: 24px !important;
+          background: #1e1e1e !important;
+          border: 1px solid #404040 !important;
+          border-radius: 4px !important;
+          padding: 0 8px !important;
+          color: #ffffff !important;
+          font-size: 11px !important;
+          width: 100% !important;
+        }
+      }
+    `;
+    document.head.appendChild(overrideStyle);
+  }
+
+  /**
    * 配置 Tailwind（在脚本加载完成后调用）
    */
   private configureTailwind(document: any) {
@@ -604,6 +708,12 @@ export class VisualEditorProvider implements vscode.CustomTextEditorProvider {
       '  if (typeof window.tailwind !== "undefined") {',
       '    try {',
       '      window.tailwind.config = {',
+      '        corePlugins: {',
+      '          preflight: false // 禁用 Tailwind 的表单重置样式',
+      '        },',
+      '        layers: {',
+      '          order: ["base", "components", "utilities", "wve-overrides"]',
+      '        },',
       '        safelist: [',
       '          "flex", "flex-col", "grid", "items-center", "justify-center",',
       '          "fixed", "absolute", "relative", "z-10", "z-20", "z-50",',

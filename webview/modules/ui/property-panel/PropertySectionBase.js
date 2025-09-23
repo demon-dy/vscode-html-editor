@@ -16,7 +16,7 @@ window.WVE.PropertySectionBase = class PropertySectionBase {
     this.toggleButton = null;
 
     this.logger = new window.WVE.Logger(this.constructor.name);
-    this.controls = window.WVE.PropertyControls;
+    this.controls = window.WVE.PropertyControls || null;
   }
 
   /**
@@ -115,13 +115,35 @@ window.WVE.PropertySectionBase = class PropertySectionBase {
     `;
 
     this.actions.forEach(action => {
-      const button = this.controls.createIconButton({
-        icon: action.icon,
-        title: action.title,
-        size: 16,
-        onClick: action.onClick
-      });
-      rightGroup.appendChild(button);
+      if (this.controls && typeof this.controls.createIconButton === 'function') {
+        const button = this.controls.createIconButton({
+          icon: action.icon,
+          title: action.title,
+          size: 16,
+          onClick: action.onClick
+        });
+        rightGroup.appendChild(button);
+      } else {
+        // fallback: 创建一个简单的按钮
+        const button = document.createElement('button');
+        button.textContent = action.title;
+        button.title = action.title;
+        button.style.cssText = `
+          background: transparent;
+          border: 1px solid #404040;
+          color: #cccccc;
+          padding: 2px 6px;
+          font-size: 10px;
+          cursor: pointer;
+        `;
+        if (action.onClick) {
+          button.addEventListener('click', action.onClick);
+        }
+        rightGroup.appendChild(button);
+
+        // 记录警告
+        this.logger.warn('PropertyControls.createIconButton not available, using fallback button');
+      }
     });
 
     header.appendChild(leftGroup);
@@ -359,13 +381,37 @@ window.WVE.PropertySectionBase = class PropertySectionBase {
       width: ${width};
     `;
 
-    const input = this.controls.createInput({
-      type: 'number',
-      value: value || '0',
-      min,
-      max,
-      onChange
-    });
+    let input;
+    if (this.controls && typeof this.controls.createInput === 'function') {
+      input = this.controls.createInput({
+        type: 'number',
+        value: value || '0',
+        min,
+        max,
+        onChange
+      });
+    } else {
+      // fallback: 创建一个简单的输入框
+      input = document.createElement('input');
+      input.type = 'number';
+      input.value = value || '0';
+      input.min = min;
+      input.max = max;
+      input.style.cssText = `
+        height: 24px;
+        background: #1e1e1e;
+        border: 1px solid #404040;
+        border-radius: 4px;
+        padding: 0 8px;
+        color: #ffffff;
+        font-size: 11px;
+        width: 100%;
+      `;
+      if (onChange) {
+        input.addEventListener('input', (e) => onChange(e.target.value));
+      }
+      this.logger.warn('PropertyControls.createInput not available, using fallback input');
+    }
 
     if (suffix) {
       const suffixElement = document.createElement('span');
